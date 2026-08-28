@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-
-const STORAGE_KEY = 'it-dashboard-display-settings'
+import { supabase } from '../supabaseClient'
 
 export const ALL_FIELDS = [
   { key: 'name', label: 'Name' },
@@ -20,25 +19,42 @@ export function useDisplaySettings() {
   const [settings, setSettings] = useState(DEFAULTS)
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) {
-      try {
-        setSettings({ ...DEFAULTS, ...JSON.parse(saved) })
-      } catch {
-        // ignore corrupt storage
-      }
-    }
+    fetchSettings()
+
+    const sub = supabase
+      .channel('display-settings-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'app_display_settings' },
+        fetchSettings
+      )
+      .subscribe()
+
+    return () => supabase.removeChannel(sub)
   }, [])
 
-  const update = (category, field, value) => {
-    setSettings((prev) => {
-      const next = {
-        ...prev,
-        [category]: { ...prev[category], [field]: value },
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-      return next
-    })
+  const fetchSettings = async () => {
+    const { data, error } = await supabase.from('app_display_settings').select('*')
+    if (error) {
+      console.error(error)
+      return
+    }
+    if (data && data.length > 0) {
+      const next = { ...DEFAULTS }
+      data.forEach((row) => {
+        next[row.category] = { ...DEFAULTS.School, ...row.fields }
+      })
+      setSettings(next)
+    }
+  }
+
+  const update = async (category, field, value) => {
+    const nextFields = { ...(settings[category] || DEFAULTS.School), [field]: value }
+    setSettings((prev) => ({ ...prev, [category]: nextFields }))
+    const { error } = await supabase
+      .from('app_display_settings')
+      .upsert({ category, fields: nextFields })
+    if (error) console.error(error)
   }
 
   const getFieldsFor = (category) => settings[category] || DEFAULTS.School

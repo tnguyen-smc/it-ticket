@@ -3,6 +3,8 @@ import { supabase } from '../supabaseClient'
 import { PRESET_COLORS, hexToRgba } from '../lib/colors'
 
 const URL_REGEX = /^(https?:\/\/[^\s]+)$/i
+const BULLET_PREFIX = /^-\s+(.*)/
+const NUMBER_PREFIX = /^(\d+)\.\s+(.*)/
 
 export default function BoardView() {
   const [items, setItems] = useState([])
@@ -15,7 +17,7 @@ export default function BoardView() {
 
   const panStart = useRef({ x: 0, y: 0 })
   const panOrigin = useRef({ x: 0, y: 0 })
-  const draggingCard = useRef(null) // { id, startMouse:{x,y}, startPos:{x,y} }
+  const draggingCard = useRef(null)
   const containerRef = useRef(null)
 
   useEffect(() => {
@@ -42,7 +44,6 @@ export default function BoardView() {
     }
   }, [])
 
-  // Native wheel listener so preventDefault reliably blocks page/trackpad scroll
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
@@ -50,7 +51,6 @@ export default function BoardView() {
     const handleWheel = (e) => {
       e.preventDefault()
       if (e.ctrlKey || e.metaKey) {
-        // Pinch-zoom (trackpad) or ctrl+wheel: zoom, centered on cursor
         const rect = el.getBoundingClientRect()
         const cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top }
         setZoom((prevZoom) => {
@@ -62,7 +62,6 @@ export default function BoardView() {
           return newZoom
         })
       } else {
-        // Two-finger trackpad scroll (or mouse wheel): pan in any direction
         setPan((prev) => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }))
       }
     }
@@ -74,7 +73,7 @@ export default function BoardView() {
   const fetchItems = async () => {
     const { data, error } = await supabase.from('board_items').select('*')
     if (error) {
-      console.error(error)
+      console.error('Failed to load board items:', error)
       return
     }
     setItems(data || [])
@@ -96,8 +95,7 @@ export default function BoardView() {
 
     const newCard = {
       title: 'New Note',
-      lists: [{ id: crypto.randomUUID(), title: 'Checklist', items: [] }],
-      images: [],
+      lists: [{ id: crypto.randomUUID(), title: 'Checklist', items: [], files: [] }],
       color: PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)],
       x: worldX,
       y: worldY,
@@ -105,11 +103,13 @@ export default function BoardView() {
       height: 200,
     }
     const { data, error } = await supabase.from('board_items').insert(newCard).select()
-    if (error) console.error(error)
+    if (error) {
+      console.error('Failed to create card:', error)
+      return
+    }
     if (data) setItems((prev) => [...prev, ...data])
   }
 
-  // --- Canvas panning (only when clicking empty background, not a card) ---
   const handleCanvasMouseDown = (e) => {
     if (e.target !== containerRef.current && e.target.dataset?.canvasBg !== 'true') return
     setIsPanning(true)
@@ -130,9 +130,7 @@ export default function BoardView() {
         const dx = (e.clientX - startMouse.x) / zoom
         const dy = (e.clientY - startMouse.y) / zoom
         setItems((prev) =>
-          prev.map((it) =>
-            it.id === id ? { ...it, x: startPos.x + dx, y: startPos.y + dy } : it
-          )
+          prev.map((it) => (it.id === id ? { ...it, x: startPos.x + dx, y: startPos.y + dy } : it))
         )
       }
     },
@@ -162,7 +160,8 @@ export default function BoardView() {
 
   const updateCard = async (id, patch) => {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)))
-    await supabase.from('board_items').update(patch).eq('id', id)
+    const { error } = await supabase.from('board_items').update(patch).eq('id', id)
+    if (error) console.error('Failed to save card update:', error)
   }
 
   const deleteCard = async (id) => {
@@ -197,7 +196,6 @@ export default function BoardView() {
 
   const cardCenter = (card) => ({ x: card.x + card.width / 2, y: card.y + (card.height || 200) / 2 })
 
-  // --- Minimap bounds ---
   const bounds = items.reduce(
     (acc, it) => ({
       minX: Math.min(acc.minX, it.x),
@@ -250,7 +248,6 @@ export default function BoardView() {
           backgroundPosition: `${pan.x}px ${pan.y}px`,
         }}
       >
-        {/* World layer: everything here uses raw world coordinates */}
         <div
           data-canvas-bg="true"
           className="absolute top-0 left-0"
@@ -261,7 +258,6 @@ export default function BoardView() {
             height: 1,
           }}
         >
-          {/* Connector lines */}
           <svg
             className="absolute overflow-visible pointer-events-none"
             style={{ left: 0, top: 0, width: 1, height: 1 }}
@@ -332,7 +328,6 @@ function Minimap({ items, bounds, pan, zoom, viewportSize }) {
     y: (y - bounds.minY + padding) * scale,
   })
 
-  // Visible viewport in world coordinates
   const viewTopLeft = { x: -pan.x / zoom, y: -pan.y / zoom }
   const viewBottomRight = {
     x: (viewportSize.width - pan.x) / zoom,
@@ -380,15 +375,16 @@ function Minimap({ items, bounds, pan, zoom, viewportSize }) {
 function BoardCard({ card, onDragStart, onUpdate, onDelete, connectMode, isConnectSource, onCardClick }) {
   const [title, setTitle] = useState(card.title)
   const [showColorPicker, setShowColorPicker] = useState(false)
-  const [newImageUrl, setNewImageUrl] = useState('')
-  const [addingImage, setAddingImage] = useState(false)
 
-  const lists = card.lists && card.lists.length > 0 ? card.lists : [{ id: 'default', title: 'Checklist', items: [] }]
+  const lists =
+    card.lists && card.lists.length > 0
+      ? card.lists
+      : [{ id: 'default', title: 'Checklist', items: [], files: [] }]
 
   const updateLists = (nextLists) => onUpdate({ lists: nextLists })
 
   const addList = () => {
-    updateLists([...lists, { id: crypto.randomUUID(), title: 'New List', items: [] }])
+    updateLists([...lists, { id: crypto.randomUUID(), title: 'New List', items: [], files: [] }])
   }
 
   const renameList = (listId, title) => {
@@ -399,15 +395,28 @@ function BoardCard({ card, onDragStart, onUpdate, onDelete, connectMode, isConne
     updateLists(lists.filter((l) => l.id !== listId))
   }
 
-  const addListItem = (listId, text) => {
-    if (!text.trim()) return
+  const addListItem = (listId, rawText) => {
+    if (!rawText.trim()) return
+    const bulletMatch = rawText.match(BULLET_PREFIX)
+    const numberMatch = rawText.match(NUMBER_PREFIX)
+    let text = rawText
+    let style = null
+    if (bulletMatch) {
+      text = bulletMatch[1]
+      style = 'bullet'
+    } else if (numberMatch) {
+      text = numberMatch[2]
+      style = 'number'
+    }
+
     updateLists(
       lists.map((l) =>
         l.id === listId
-          ? { ...l, items: [...l.items, { id: crypto.randomUUID(), text, done: false }] }
+          ? { ...l, items: [...l.items, { id: crypto.randomUUID(), text, done: false, style }] }
           : l
       )
     )
+    return style
   }
 
   const toggleItem = (listId, itemId) => {
@@ -418,7 +427,6 @@ function BoardCard({ card, onDragStart, onUpdate, onDelete, connectMode, isConne
               ...l,
               items: l.items
                 .map((it) => (it.id === itemId ? { ...it, done: !it.done } : it))
-                // crossed-out items sink to the bottom
                 .sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1)),
             }
           : l
@@ -432,14 +440,17 @@ function BoardCard({ card, onDragStart, onUpdate, onDelete, connectMode, isConne
     )
   }
 
-  const images = card.images || []
-  const addImage = () => {
-    if (!newImageUrl.trim()) return
-    onUpdate({ images: [...images, newImageUrl.trim()] })
-    setNewImageUrl('')
-    setAddingImage(false)
+  const addFile = (listId, file) => {
+    updateLists(lists.map((l) => (l.id === listId ? { ...l, files: [...(l.files || []), file] } : l)))
   }
-  const removeImage = (url) => onUpdate({ images: images.filter((i) => i !== url) })
+
+  const removeFile = (listId, fileId) => {
+    updateLists(
+      lists.map((l) =>
+        l.id === listId ? { ...l, files: (l.files || []).filter((f) => f.id !== fileId) } : l
+      )
+    )
+  }
 
   return (
     <div
@@ -465,10 +476,7 @@ function BoardCard({ card, onDragStart, onUpdate, onDelete, connectMode, isConne
           if (!connectMode) onDragStart(e)
         }}
         className="px-3 py-2 flex items-center justify-between relative"
-        style={{
-          backgroundColor: hexToRgba(card.color, 1),
-          cursor: connectMode ? 'crosshair' : 'grab',
-        }}
+        style={{ backgroundColor: hexToRgba(card.color, 1), cursor: connectMode ? 'crosshair' : 'grab' }}
       >
         <button
           onMouseDown={(e) => e.stopPropagation()}
@@ -525,7 +533,10 @@ function BoardCard({ card, onDragStart, onUpdate, onDelete, connectMode, isConne
             onAddItem={(text) => addListItem(list.id, text)}
             onToggleItem={(itemId) => toggleItem(list.id, itemId)}
             onRemoveItem={(itemId) => removeItem(list.id, itemId)}
+            onAddFile={(file) => addFile(list.id, file)}
+            onRemoveFile={(fileId) => removeFile(list.id, fileId)}
             showDeleteList={lists.length > 1}
+            cardId={card.id}
           />
         ))}
 
@@ -536,64 +547,62 @@ function BoardCard({ card, onDragStart, onUpdate, onDelete, connectMode, isConne
         >
           + Add list
         </button>
-
-        {images.length > 0 && (
-          <div className="grid grid-cols-2 gap-1.5">
-            {images.map((url) => (
-              <div key={url} className="relative group">
-                <img src={url} alt="" className="w-full h-16 object-cover rounded" />
-                <button
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={() => removeImage(url)}
-                  className="absolute top-0.5 right-0.5 bg-black/50 text-white rounded-full w-4 h-4 text-[10px] opacity-0 group-hover:opacity-100"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {addingImage ? (
-          <div className="flex gap-1" onMouseDown={(e) => e.stopPropagation()}>
-            <input
-              value={newImageUrl}
-              onChange={(e) => setNewImageUrl(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addImage()}
-              placeholder="Paste image URL"
-              className="flex-1 bg-white/60 rounded px-2 py-1 text-xs outline-none"
-              autoFocus
-            />
-            <button onClick={addImage} className="text-xs bg-slate-800 text-white rounded px-2">
-              Add
-            </button>
-          </div>
-        ) : (
-          <button
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={() => setAddingImage(true)}
-            className="text-xs text-slate-500 hover:text-slate-700"
-          >
-            + Add image (URL)
-          </button>
-        )}
       </div>
     </div>
   )
 }
 
-function ListBlock({ list, onRename, onDeleteList, onAddItem, onToggleItem, onRemoveItem, showDeleteList }) {
+function ListBlock({
+  list,
+  onRename,
+  onDeleteList,
+  onAddItem,
+  onToggleItem,
+  onRemoveItem,
+  onAddFile,
+  onRemoveFile,
+  showDeleteList,
+  cardId,
+}) {
   const [titleDraft, setTitleDraft] = useState(list.title)
   const [newItemText, setNewItemText] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef(null)
 
   const submitItem = () => {
     if (!newItemText.trim()) return
-    onAddItem(newItemText)
-    setNewItemText('')
+    const style = onAddItem(newItemText)
+    if (style === 'bullet') {
+      setNewItemText('- ')
+    } else if (style === 'number') {
+      const nextNum = (list.items.filter((i) => i.style === 'number').length || 0) + 2
+      setNewItemText(`${nextNum}. `)
+    } else {
+      setNewItemText('')
+    }
   }
 
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    const path = `${cardId}/${list.id}/${Date.now()}-${file.name}`
+    const { error } = await supabase.storage.from('board-files').upload(path, file)
+    if (error) {
+      console.error('File upload failed:', error)
+      setUploading(false)
+      return
+    }
+    const { data: urlData } = supabase.storage.from('board-files').getPublicUrl(path)
+    onAddFile({ id: crypto.randomUUID(), name: file.name, url: urlData.publicUrl })
+    setUploading(false)
+    e.target.value = ''
+  }
+
+  let numberCounter = 0
+
   return (
-    <div className="bg-white/40 rounded-lg p-2">
+    <div>
       <div className="flex items-center justify-between mb-1">
         <input
           value={titleDraft}
@@ -602,62 +611,122 @@ function ListBlock({ list, onRename, onDeleteList, onAddItem, onToggleItem, onRe
           onMouseDown={(e) => e.stopPropagation()}
           className="bg-transparent text-xs font-semibold text-slate-700 outline-none w-full"
         />
-        {showDeleteList && (
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileSelect}
+            onMouseDown={(e) => e.stopPropagation()}
+          />
           <button
             onMouseDown={(e) => e.stopPropagation()}
-            onClick={onDeleteList}
-            className="text-slate-400 hover:text-red-500 text-xs flex-shrink-0"
+            onClick={() => fileInputRef.current?.click()}
+            className="text-slate-500 hover:text-slate-800"
+            title="Attach a file"
           >
-            ✕
-          </button>
-        )}
-      </div>
-
-      <div className="space-y-1">
-        {list.items.map((it) => (
-          <div key={it.id} className="flex items-center gap-2 group">
-            <input
-              type="checkbox"
-              checked={it.done}
-              onChange={() => onToggleItem(it.id)}
-              onMouseDown={(e) => e.stopPropagation()}
-            />
-            {URL_REGEX.test(it.text) ? (
-              <a
-                href={it.text}
-                target="_blank"
-                rel="noopener noreferrer"
-                onMouseDown={(e) => e.stopPropagation()}
-                className={`text-sm flex-1 underline ${
-                  it.done ? 'line-through text-slate-400' : 'text-blue-600'
-                }`}
-              >
-                {it.text}
-              </a>
+            {uploading ? (
+              <span className="text-[10px]">…</span>
             ) : (
-              <span
-                className={`text-sm flex-1 ${it.done ? 'line-through text-slate-500' : 'text-slate-700'}`}
-              >
-                {it.text}
-              </span>
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                />
+              </svg>
             )}
+          </button>
+          {showDeleteList && (
             <button
               onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => onRemoveItem(it.id)}
-              className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 text-xs"
+              onClick={onDeleteList}
+              className="text-slate-400 hover:text-red-500 text-xs"
             >
               ✕
             </button>
-          </div>
-        ))}
+          )}
+        </div>
+      </div>
 
-        <div className="flex items-center gap-1 pt-1" onMouseDown={(e) => e.stopPropagation()}>
+      {(list.files || []).length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-1.5">
+          {list.files.map((f) => (
+            <a
+              key={f.id}
+              href={f.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onMouseDown={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 bg-white/60 rounded-full px-2 py-0.5 text-[11px] text-slate-600 hover:bg-white group"
+            >
+              📎 {f.name}
+              <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.preventDefault()
+                  onRemoveFile(f.id)
+                }}
+                className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100"
+              >
+                ✕
+              </button>
+            </a>
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-1">
+        {list.items.map((it) => {
+          if (it.style === 'number' && !it.done) numberCounter += 1
+          return (
+            <div key={it.id} className="flex items-center gap-2 group">
+              <input
+                type="checkbox"
+                checked={it.done}
+                onChange={() => onToggleItem(it.id)}
+                onMouseDown={(e) => e.stopPropagation()}
+              />
+              <span className="text-sm flex-1 flex items-baseline gap-1">
+                {it.style === 'bullet' && !it.done && <span className="text-slate-400">•</span>}
+                {it.style === 'number' && !it.done && (
+                  <span className="text-slate-400">{numberCounter}.</span>
+                )}
+                {URL_REGEX.test(it.text) ? (
+                  <a
+                    href={it.text}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    className={`underline ${it.done ? 'line-through text-slate-400' : 'text-blue-600'}`}
+                  >
+                    {it.text}
+                  </a>
+                ) : (
+                  <span className={it.done ? 'line-through text-slate-500' : 'text-slate-700'}>
+                    {it.text}
+                  </span>
+                )}
+              </span>
+              <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => onRemoveItem(it.id)}
+                className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 text-xs"
+              >
+                ✕
+              </button>
+            </div>
+          )
+        })}
+
+        <div className="pt-1" onMouseDown={(e) => e.stopPropagation()}>
           <input
             value={newItemText}
             onChange={(e) => setNewItemText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submitItem()}
-            placeholder="+ add item or paste a link"
-            className="flex-1 bg-white/50 rounded px-2 py-1 text-xs outline-none"
+            placeholder="+ add item, '- ' for a bullet, '1. ' for a number"
+            className="w-full bg-transparent border-b border-white/40 focus:border-slate-400 px-0.5 py-1 text-xs outline-none placeholder:text-slate-500/60"
           />
         </div>
       </div>

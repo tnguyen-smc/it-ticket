@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { hexToRgba, isLightColor } from '../lib/colors'
 
-export default function ColorStatusSelect({ value, groups, onChange }) {
+export default function ColorStatusSelect({ value, groups, onChange, compact = false }) {
   const [open, setOpen] = useState(false)
   const [menuStyle, setMenuStyle] = useState({})
   const btnRef = useRef(null)
@@ -34,8 +34,8 @@ export default function ColorStatusSelect({ value, groups, onChange }) {
 
       setMenuStyle({
         position: 'fixed',
-        left: rect.left,
-        width: rect.width,
+        left: compact ? Math.max(0, rect.right - Math.max(rect.width, 140)) : rect.left,
+        width: compact ? Math.max(rect.width, 140) : rect.width,
         top: openUpward ? undefined : rect.bottom + 4,
         bottom: openUpward ? window.innerHeight - rect.top + 4 : undefined,
         maxHeight: menuHeight,
@@ -50,28 +50,43 @@ export default function ColorStatusSelect({ value, groups, onChange }) {
         ref={btnRef}
         type="button"
         onClick={toggleOpen}
-        className="w-full flex items-center justify-between gap-2 text-xs font-medium rounded-full px-3 py-1.5 transition-all hover:brightness-95"
+        className={
+          compact
+            ? 'flex items-center gap-1 rounded-full px-2 py-1 transition-all hover:brightness-95'
+            : 'w-full flex items-center justify-between gap-2 text-xs font-medium rounded-full px-3 py-1.5 transition-all hover:brightness-95'
+        }
         style={{
           backgroundColor: hexToRgba(currentColor, 0.18),
           color: isLightColor(currentColor) ? '#334155' : currentColor,
           border: `1px solid ${hexToRgba(currentColor, 0.4)}`,
         }}
       >
-        <span className="flex items-center gap-1.5 truncate">
-          <span
-            className="w-2 h-2 rounded-full flex-shrink-0"
-            style={{ backgroundColor: currentColor }}
-          />
-          {value}
-        </span>
-        <svg
-          className={`w-3 h-3 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        {compact ? (
+          <>
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: currentColor }} />
+            <svg className={`w-2.5 h-2.5 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </>
+        ) : (
+          <>
+            <span className="flex items-center gap-1.5 truncate">
+              <span
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: currentColor }}
+              />
+              {value}
+            </span>
+            <svg
+              className={`w-3 h-3 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </>
+        )}
       </button>
 
       {open &&

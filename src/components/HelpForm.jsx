@@ -50,6 +50,7 @@ export default function HelpForm() {
   if (status === 'done') {
     return (
       <div className="min-h-screen flex items-center justify-center gap-6 bg-slate-50 px-4 py-8 flex-wrap">
+        <PublicStatusSummary />
         <div className="bg-white shadow-md rounded-2xl p-8 max-w-md text-center">
           <h1 className="text-2xl font-semibold text-slate-800 mb-2">Ticket Submitted ✅</h1>
           <p className="text-slate-500">
@@ -62,13 +63,13 @@ export default function HelpForm() {
             Submit Another
           </button>
         </div>
-        <PublicStatusSummary />
       </div>
     )
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center gap-6 bg-slate-50 px-4 py-8 flex-wrap">
+      <PublicStatusSummary />
       <form
         onSubmit={handleSubmit}
         className="bg-white shadow-md rounded-2xl p-8 w-full max-w-md space-y-5"
@@ -108,7 +109,6 @@ export default function HelpForm() {
           </p>
         )}
       </form>
-      <PublicStatusSummary />
     </div>
   )
 }
