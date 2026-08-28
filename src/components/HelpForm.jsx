@@ -76,7 +76,7 @@ export default function HelpForm() {
       >
         <div>
           <img
-            src="public/School-logo.png"
+            src={`${import.meta.env.BASE_URL}School-logo.png`}
             alt=""
             className="h-10 w-10 mb-2"
             style={{ filter: 'brightness(0) saturate(100%)' }}

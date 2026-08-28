@@ -112,7 +112,11 @@ export default function ITDashboard({ session }) {
         style={{ backgroundColor: '#5C8768' }}
       >
         <div className="flex items-center gap-3">
-          <img src="public/School-logo.png" alt="" className="h-9 w-9 flex-shrink-0" />
+          <img
+            src={`${import.meta.env.BASE_URL}School-logo.png`}
+            alt=""
+            className="h-9 w-9 flex-shrink-0"
+          />
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-white/60 mb-0.5">
               St. Mary Catholic School
