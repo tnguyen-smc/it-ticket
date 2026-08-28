@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AnimatePresence } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import TicketCard from './TicketCard'
 import { hexToRgba } from '../lib/colors'
 import { useMultiSelect } from '../hooks/useMultiSelect'
@@ -99,7 +99,9 @@ export default function KanbanView({
                 }
 
                 return (
-                  <div
+                  <motion.div
+                    layout
+                    transition={{ duration: 0.2 }}
                     key={group.id}
                     draggable
                     onDragStart={() => setDraggedGroupId(group.id)}
@@ -185,7 +187,7 @@ export default function KanbanView({
                         <p className="text-xs text-slate-400 px-1">Drop tickets here</p>
                       )}
                     </div>
-                  </div>
+                  </motion.div>
                 )
               })}
             </div>

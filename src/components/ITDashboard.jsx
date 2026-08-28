@@ -61,11 +61,18 @@ export default function ITDashboard({ session }) {
   }
 
   const updateTicketStatus = async (ticketId, newStatus) => {
+    // Optimistic update: reflect the change instantly instead of waiting on
+    // the round trip to Supabase + realtime, which was causing a visible
+    // delay and a "choppy" resize of the groups/columns.
+    setTickets((prev) => prev.map((t) => (t.id === ticketId ? { ...t, status: newStatus } : t)))
     const { error } = await supabase
       .from('tickets')
       .update({ status: newStatus })
       .eq('id', ticketId)
-    if (error) console.error(error)
+    if (error) {
+      console.error(error)
+      fetchTickets() // roll back to server state if the update actually failed
+    }
   }
 
   const updateTicketNotes = async (ticketId, notes) => {

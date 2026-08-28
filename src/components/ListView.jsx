@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AnimatePresence } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import TicketCard from './TicketCard'
 import GroupManager from './GroupManager'
 import { hexToRgba } from '../lib/colors'
@@ -78,7 +78,9 @@ export default function ListView({
         {groups.map((group) => {
           const groupTickets = tickets.filter((t) => t.status === group.name)
           return (
-            <div
+            <motion.div
+              layout
+              transition={{ duration: 0.2 }}
               key={group.id}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => handleDrop(e, group.name)}
@@ -146,7 +148,7 @@ export default function ListView({
                   ))}
                 </AnimatePresence>
               </div>
-            </div>
+            </motion.div>
           )
         })}
       </div>

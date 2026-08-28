@@ -18,6 +18,7 @@ export default function BoardView() {
   const panStart = useRef({ x: 0, y: 0 })
   const panOrigin = useRef({ x: 0, y: 0 })
   const draggingCard = useRef(null)
+  const resizingCard = useRef(null)
   const containerRef = useRef(null)
 
   useEffect(() => {
@@ -133,6 +134,22 @@ export default function BoardView() {
           prev.map((it) => (it.id === id ? { ...it, x: startPos.x + dx, y: startPos.y + dy } : it))
         )
       }
+      if (resizingCard.current) {
+        const { id, startMouse, startSize } = resizingCard.current
+        const dx = (e.clientX - startMouse.x) / zoom
+        const dy = (e.clientY - startMouse.y) / zoom
+        setItems((prev) =>
+          prev.map((it) =>
+            it.id === id
+              ? {
+                  ...it,
+                  width: Math.max(200, startSize.width + dx),
+                  height: Math.max(140, startSize.height + dy),
+                }
+              : it
+          )
+        )
+      }
     },
     [isPanning, zoom]
   )
@@ -146,6 +163,23 @@ export default function BoardView() {
         await supabase.from('board_items').update({ x: item.x, y: item.y }).eq('id', id)
       }
       draggingCard.current = null
+    }
+    if (resizingCard.current) {
+      const { id } = resizingCard.current
+      const item = items.find((it) => it.id === id)
+      if (item) {
+        await supabase.from('board_items').update({ width: item.width, height: item.height }).eq('id', id)
+      }
+      resizingCard.current = null
+    }
+  }
+
+  const startCardResize = (e, card) => {
+    e.stopPropagation()
+    resizingCard.current = {
+      id: card.id,
+      startMouse: { x: e.clientX, y: e.clientY },
+      startSize: { width: card.width, height: card.height || 200 },
     }
   }
 
@@ -291,6 +325,7 @@ export default function BoardView() {
               connectMode={connectMode}
               isConnectSource={connectFrom === card.id}
               onDragStart={(e) => startCardDrag(e, card)}
+              onResizeStart={(e) => startCardResize(e, card)}
               onUpdate={(patch) => updateCard(card.id, patch)}
               onDelete={() => deleteCard(card.id)}
               onCardClick={() => handleCardClick(card)}
@@ -299,12 +334,13 @@ export default function BoardView() {
         </div>
       </div>
 
-      {isPanning && items.length > 0 && (
+      {items.length > 0 && (
         <Minimap
           items={items}
           bounds={bounds}
           pan={pan}
           zoom={zoom}
+          setPan={setPan}
           viewportSize={{
             width: containerRef.current?.clientWidth || 0,
             height: containerRef.current?.clientHeight || 0,
@@ -315,10 +351,13 @@ export default function BoardView() {
   )
 }
 
-function Minimap({ items, bounds, pan, zoom, viewportSize }) {
+function Minimap({ items, bounds, pan, zoom, setPan, viewportSize }) {
   const MAP_W = 160
   const MAP_H = 110
   const padding = 40
+  const mapRef = useRef(null)
+  const [dragging, setDragging] = useState(false)
+
   const worldW = Math.max(bounds.maxX - bounds.minX + padding * 2, 1)
   const worldH = Math.max(bounds.maxY - bounds.minY + padding * 2, 1)
   const scale = Math.min(MAP_W / worldW, MAP_H / worldH)
@@ -326,6 +365,12 @@ function Minimap({ items, bounds, pan, zoom, viewportSize }) {
   const toMap = (x, y) => ({
     x: (x - bounds.minX + padding) * scale,
     y: (y - bounds.minY + padding) * scale,
+  })
+
+  // Map-space point -> world-space point (inverse of toMap)
+  const toWorld = (mapX, mapY) => ({
+    x: mapX / scale + bounds.minX - padding,
+    y: mapY / scale + bounds.minY - padding,
   })
 
   const viewTopLeft = { x: -pan.x / zoom, y: -pan.y / zoom }
@@ -336,18 +381,44 @@ function Minimap({ items, bounds, pan, zoom, viewportSize }) {
   const vTL = toMap(viewTopLeft.x, viewTopLeft.y)
   const vBR = toMap(viewBottomRight.x, viewBottomRight.y)
 
+  // Clicking or dragging within the minimap re-centers the main canvas on
+  // that point, so the map is actually useful for finding cards elsewhere
+  // on an otherwise-infinite canvas.
+  const jumpTo = (e) => {
+    if (!mapRef.current) return
+    const rect = mapRef.current.getBoundingClientRect()
+    const mapX = e.clientX - rect.left
+    const mapY = e.clientY - rect.top
+    const world = toWorld(mapX, mapY)
+    setPan({
+      x: viewportSize.width / 2 - world.x * zoom,
+      y: viewportSize.height / 2 - world.y * zoom,
+    })
+  }
+
   return (
     <div
       className="absolute bottom-3 right-3 bg-white/90 backdrop-blur border border-slate-200 rounded-lg shadow-md p-1.5"
       style={{ width: MAP_W, height: MAP_H }}
     >
-      <div className="relative w-full h-full overflow-hidden rounded">
+      <div
+        ref={mapRef}
+        onMouseDown={(e) => {
+          setDragging(true)
+          jumpTo(e)
+        }}
+        onMouseMove={(e) => dragging && jumpTo(e)}
+        onMouseUp={() => setDragging(false)}
+        onMouseLeave={() => setDragging(false)}
+        className="relative w-full h-full overflow-hidden rounded cursor-pointer"
+        title="Click or drag to jump around the board"
+      >
         {items.map((it) => {
           const p = toMap(it.x, it.y)
           return (
             <div
               key={it.id}
-              className="absolute rounded-sm"
+              className="absolute rounded-sm pointer-events-none"
               style={{
                 left: p.x,
                 top: p.y,
@@ -359,7 +430,7 @@ function Minimap({ items, bounds, pan, zoom, viewportSize }) {
           )
         })}
         <div
-          className="absolute border-2 border-blue-500 bg-blue-500/10"
+          className="absolute border-2 border-blue-500 bg-blue-500/10 pointer-events-none"
           style={{
             left: vTL.x,
             top: vTL.y,
@@ -372,7 +443,7 @@ function Minimap({ items, bounds, pan, zoom, viewportSize }) {
   )
 }
 
-function BoardCard({ card, onDragStart, onUpdate, onDelete, connectMode, isConnectSource, onCardClick }) {
+function BoardCard({ card, onDragStart, onResizeStart, onUpdate, onDelete, connectMode, isConnectSource, onCardClick }) {
   const [title, setTitle] = useState(card.title)
   const [showColorPicker, setShowColorPicker] = useState(false)
 
@@ -454,6 +525,9 @@ function BoardCard({ card, onDragStart, onUpdate, onDelete, connectMode, isConne
 
   return (
     <div
+      onMouseDown={(e) => {
+        if (!connectMode && e.button === 0) onDragStart(e)
+      }}
       onClick={(e) => {
         if (connectMode) {
           e.stopPropagation()
@@ -466,17 +540,20 @@ function BoardCard({ card, onDragStart, onUpdate, onDelete, connectMode, isConne
         top: card.y,
         width: card.width,
         minHeight: card.height,
-        backgroundColor: hexToRgba(card.color, 0.85),
         border: isConnectSource ? '2px solid #3b82f6' : `1px solid ${hexToRgba(card.color, 1)}`,
-        cursor: connectMode ? 'crosshair' : 'default',
+        cursor: connectMode ? 'crosshair' : 'grab',
       }}
     >
+      {/* Opaque white backing so connector lines and the canvas dot-grid never
+          show through the card, while the color layer on top keeps the
+          translucent pastel look */}
+      <div className="absolute inset-0 bg-white" />
+      <div className="absolute inset-0" style={{ backgroundColor: hexToRgba(card.color, 0.85) }} />
+
+      <div className="relative flex flex-col flex-1">
       <div
-        onMouseDown={(e) => {
-          if (!connectMode) onDragStart(e)
-        }}
         className="px-3 py-2 flex items-center justify-between relative"
-        style={{ backgroundColor: hexToRgba(card.color, 1), cursor: connectMode ? 'crosshair' : 'grab' }}
+        style={{ backgroundColor: hexToRgba(card.color, 1), cursor: connectMode ? 'crosshair' : 'inherit' }}
       >
         <button
           onMouseDown={(e) => e.stopPropagation()}
@@ -547,6 +624,20 @@ function BoardCard({ card, onDragStart, onUpdate, onDelete, connectMode, isConne
         >
           + Add list
         </button>
+      </div>
+      </div>
+
+      <div
+        onMouseDown={(e) => {
+          e.stopPropagation()
+          onResizeStart(e)
+        }}
+        className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize"
+        title="Drag to resize"
+      >
+        <svg viewBox="0 0 16 16" className="w-full h-full text-black/25">
+          <path d="M14 2 2 14M14 8 8 14" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
       </div>
     </div>
   )
@@ -725,7 +816,7 @@ function ListBlock({
             value={newItemText}
             onChange={(e) => setNewItemText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submitItem()}
-            placeholder="+ add item, '- ' for a bullet, '1. ' for a number"
+            placeholder="+ add item"
             className="w-full bg-transparent border-b border-white/40 focus:border-slate-400 px-0.5 py-1 text-xs outline-none placeholder:text-slate-500/60"
           />
         </div>
