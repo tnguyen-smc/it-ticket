@@ -1,4 +1,4 @@
-# IT Help Desk — Setup & Deployment Guide
+# IT Help Desk — Setup & Deployment Guide (100% Online, No Terminal Required)
 
 A two-view IT ticketing app for a small school, built with React (Vite) + Tailwind CSS,
 using Supabase for the database/realtime/auth and EmailJS for email notifications.
@@ -7,13 +7,28 @@ using Supabase for the database/realtime/auth and EmailJS for email notification
 - `/it` — admin dashboard (List + Kanban views), gated behind Google Sign-In restricted
   to your school's Google Workspace domain
 
+**This version is built for people working entirely in github.dev (the web editor) with
+no terminal.** Building and deploying is handled automatically by a GitHub Actions
+workflow (`.github/workflows/deploy.yml`) every time you push a change — you never run
+`npm install` or `npm run build` yourself, and you never create a `.env` file. Secrets
+are stored in GitHub's encrypted Secrets settings instead.
+
 ---
 
-## 1. Install dependencies
+## 1. Upload this project to a GitHub repo
 
-```bash
-npm install
-```
+1. Go to https://github.com/new and create a new repository (e.g. `it-ticket-app`).
+   Don't add a README/gitignore — leave it empty.
+2. On the new repo's page, click **"uploading an existing file"** and drag in every
+   file/folder from this zip (make sure the `.github` folder comes through — GitHub's
+   web upload sometimes hides dotfolders, so if it doesn't appear, use github.dev's
+   file explorer to create `.github/workflows/deploy.yml` manually and paste in the
+   contents).
+3. Commit directly to the `main` branch.
+
+Alternatively, open `https://github.dev/YOUR_USERNAME/it-ticket-app` right after
+creating the empty repo, and use the file explorer's "New File"/"New Folder" buttons
+to recreate the project structure by pasting in each file's contents.
 
 ## 2. Create your Supabase project
 
@@ -65,37 +80,39 @@ blocks anyone outside your school's domain from seeing the dashboard.
 4. Copy your **Service ID**, **Template ID**, and **Public Key** (found under Account →
    General).
 
-## 5. Configure environment variables
+## 5. Add your keys as GitHub Secrets (replaces the .env file)
 
-```bash
-cp .env.example .env
-```
+Since you're not running a build locally, there's no `.env` file to create. Instead:
 
-Open `.env` and fill in all the values you collected above:
+1. In your GitHub repo, go to **Settings → Secrets and variables → Actions**.
+2. Click **New repository secret** and add each of these one at a time (name must
+   match exactly):
 
-```
-VITE_SUPABASE_URL=...
-VITE_SUPABASE_ANON_KEY=...
-VITE_ALLOWED_DOMAIN=yourschool.org
-VITE_EMAILJS_SERVICE_ID=...
-VITE_EMAILJS_TEMPLATE_ID=...
-VITE_EMAILJS_PUBLIC_KEY=...
-VITE_ADMIN_EMAIL=it@yourschool.org
-```
+   | Secret name | Value |
+   |---|---|
+   | `VITE_SUPABASE_URL` | Your Supabase project URL |
+   | `VITE_SUPABASE_ANON_KEY` | Your Supabase anon public key |
+   | `VITE_ALLOWED_DOMAIN` | e.g. `yourschool.org` |
+   | `VITE_EMAILJS_SERVICE_ID` | From EmailJS |
+   | `VITE_EMAILJS_TEMPLATE_ID` | From EmailJS |
+   | `VITE_EMAILJS_PUBLIC_KEY` | From EmailJS |
+   | `VITE_ADMIN_EMAIL` | e.g. `it@yourschool.org` |
 
-`.env` is already in `.gitignore` — it will not be committed. Note that because this
-is a static site, these values do get bundled into the built JS at deploy time. This
-is expected and safe for the Supabase anon key and EmailJS public key (they're
-designed to be exposed client-side); just never put a Supabase *service role* key or
-any private API secret here.
+3. The included workflow (`.github/workflows/deploy.yml`) automatically injects these
+   as environment variables during the build step — no manual file needed.
 
-## 6. Run locally
+Note: because this is a static site, these values still end up inside the built
+JavaScript that ships to the browser (there's no server to hide them behind). That's
+expected and safe for the Supabase anon key and EmailJS public key — they're designed
+to be exposed client-side. Just never put a Supabase *service role* key or any other
+private API secret into this project.
 
-```bash
-npm run dev
-```
+## 6. Enable GitHub Pages with "GitHub Actions" as the source
 
-Visit `http://localhost:5173/help` and `http://localhost:5173/it`.
+1. In your repo, go to **Settings → Pages**.
+2. Under **"Build and deployment" → Source**, choose **GitHub Actions** (not
+   "Deploy from a branch" — that's the old manual method).
+3. That's it — no branch to create manually.
 
 ## 7. Configure the base path for GitHub Pages
 
@@ -119,17 +136,18 @@ help.yourschool.org
 If NOT using a custom domain, update `public/404.html`: set `pathSegmentsToKeep = 1`
 (keeps `/REPO-NAME` in the URL). If using a custom domain, set it to `0`.
 
-## 8. Deploy to GitHub Pages
+## 8. Deploy — just push/commit, GitHub Actions does the rest
 
-```bash
-npm run build
-npm run deploy
-```
+Any time you edit a file in github.dev and commit it (github.dev commits go straight
+to GitHub, there's no separate "push" step needed), the workflow in
+`.github/workflows/deploy.yml` automatically:
 
-This uses the `gh-pages` package to push the `dist/` folder to a `gh-pages` branch.
+1. Installs dependencies
+2. Builds the app with your secrets injected
+3. Publishes the result to GitHub Pages
 
-Then in your GitHub repo: **Settings → Pages → Source → Deploy from branch →
-`gh-pages` / root**.
+You can watch it happen under your repo's **Actions** tab — look for the "Deploy to
+GitHub Pages" run. Green checkmark = live. This usually takes 1–2 minutes.
 
 Your app will be live at:
 - `https://USERNAME.github.io/REPO-NAME/help`
@@ -149,6 +167,9 @@ in your `VITE_ALLOWED_DOMAIN`, they're in.
 
 ```
 it-ticket-app/
+├── .github/
+│   └── workflows/
+│       └── deploy.yml           # Auto build + deploy on every push (no terminal needed)
 ├── public/
 │   └── 404.html                 # GitHub Pages SPA redirect trick
 ├── src/
