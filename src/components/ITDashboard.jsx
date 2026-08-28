@@ -13,7 +13,6 @@ export default function ITDashboard({ session }) {
   const [category, setCategory] = useState('All')
   const [tickets, setTickets] = useState([])
   const [groups, setGroups] = useState([])
-  const [showArchived, setShowArchived] = useState(false)
   const { settings, update: updateDisplaySetting, getFieldsFor } = useDisplaySettings()
   const { settings: appSettings, update: updateAppSettings } = useAppSettings()
 
@@ -86,19 +85,7 @@ export default function ITDashboard({ session }) {
     }
   }
 
-  const archiveTicket = async (ticketId) => {
-    setTickets((prev) => prev.map((t) => (t.id === ticketId ? { ...t, archived: true } : t)))
-    const { error } = await supabase.from('tickets').update({ archived: true }).eq('id', ticketId)
-    if (error) console.error(error)
-  }
-
-  const restoreTicket = async (ticketId) => {
-    setTickets((prev) => prev.map((t) => (t.id === ticketId ? { ...t, archived: false } : t)))
-    const { error } = await supabase.from('tickets').update({ archived: false }).eq('id', ticketId)
-    if (error) console.error(error)
-  }
-
-  const deleteTicketPermanently = async (ticketId) => {
+  const deleteTicket = async (ticketId) => {
     setTickets((prev) => prev.filter((t) => t.id !== ticketId))
     const { error } = await supabase.from('tickets').delete().eq('id', ticketId)
     if (error) console.error(error)
@@ -116,18 +103,13 @@ export default function ITDashboard({ session }) {
     if (error) console.error(error)
   }
 
-  const activeTickets = tickets.filter((t) => !t.archived)
-  const archivedTickets = tickets.filter((t) => t.archived)
-
   const filteredTickets =
-    category === 'All'
-      ? activeTickets
-      : activeTickets.filter((t) => (t.category || 'School') === category)
+    category === 'All' ? tickets : tickets.filter((t) => (t.category || 'School') === category)
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <header
-        className="border-b border-black/10 px-6 py-4 flex items-center justify-between"
+        className="border-b border-black/10 px-6 py-3 flex items-center justify-between relative"
         style={{ backgroundColor: '#5C8768' }}
       >
         <div className="flex items-center gap-3">
@@ -147,11 +129,17 @@ export default function ITDashboard({ session }) {
           </div>
         </div>
 
-        <img
-          src={`${import.meta.env.BASE_URL}Holy-Family.png`}
-          alt=""
-          className="h-10 w-auto flex-shrink-0 hidden md:block"
-        />
+        <div className="absolute left-1/2 top-0 bottom-0 -translate-x-1/2 hidden md:flex items-center pointer-events-none">
+          <img
+            src={`${import.meta.env.BASE_URL}Holy-Family.png`}
+            alt=""
+            className="h-full py-1.5 w-auto"
+            style={{
+              filter:
+                'drop-shadow(0 0 10px rgba(255,255,255,0.55)) drop-shadow(0 0 22px rgba(255,255,255,0.35))',
+            }}
+          />
+        </div>
 
         <div className="flex items-center gap-4">
           <div className="flex bg-white/15 rounded-lg p-1">
@@ -176,13 +164,6 @@ export default function ITDashboard({ session }) {
               <GearIcon className="w-4 h-4" />
             </button>
           </div>
-
-          <button
-            onClick={() => setShowArchived(true)}
-            className="text-sm text-white/80 hover:text-white"
-          >
-            Archived {archivedTickets.length > 0 && `(${archivedTickets.length})`}
-          </button>
 
           <button
             onClick={() => supabase.auth.signOut()}
@@ -227,7 +208,7 @@ export default function ITDashboard({ session }) {
               onStatusChange={updateTicketStatus}
               onNotesChange={updateTicketNotes}
               onFieldsChange={updateTicketFields}
-              onArchiveTicket={archiveTicket}
+              onDeleteTicket={deleteTicket}
               onAddTicket={addTicket}
               getFieldsFor={getFieldsFor}
             />
@@ -241,7 +222,7 @@ export default function ITDashboard({ session }) {
               onStatusChange={updateTicketStatus}
               onNotesChange={updateTicketNotes}
               onFieldsChange={updateTicketFields}
-              onArchiveTicket={archiveTicket}
+              onDeleteTicket={deleteTicket}
               onAddTicket={addTicket}
               getFieldsFor={getFieldsFor}
             />
@@ -258,15 +239,6 @@ export default function ITDashboard({ session }) {
           )}
         </main>
       </div>
-
-      {showArchived && (
-        <TicketArchivePanel
-          tickets={archivedTickets}
-          onClose={() => setShowArchived(false)}
-          onRestore={restoreTicket}
-          onDeletePermanently={deleteTicketPermanently}
-        />
-      )}
     </div>
   )
 }
@@ -282,56 +254,5 @@ function GearIcon({ className }) {
       />
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
     </svg>
-  )
-}
-
-function TicketArchivePanel({ tickets, onClose, onRestore, onDeletePermanently }) {
-  return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 px-4">
-      <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[80vh] flex flex-col">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-slate-800">Archived Requests</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
-            ✕
-          </button>
-        </div>
-
-        {tickets.length === 0 ? (
-          <p className="text-sm text-slate-400">No archived requests.</p>
-        ) : (
-          <div className="space-y-2 overflow-y-auto">
-            {tickets.map((t) => (
-              <div
-                key={t.id}
-                className="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm text-slate-700 truncate">{t.name || 'Anonymous request'}</p>
-                  <p className="text-xs text-slate-400 truncate">{t.problem}</p>
-                </div>
-                <div className="flex gap-2 flex-shrink-0">
-                  <button
-                    onClick={() => onRestore(t.id)}
-                    className="text-xs text-blue-600 hover:text-blue-800"
-                  >
-                    Restore
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (window.confirm("Permanently delete this request? This can't be undone.")) {
-                        onDeletePermanently(t.id)
-                      }
-                    }}
-                    className="text-xs text-red-500 hover:text-red-700"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
   )
 }

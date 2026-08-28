@@ -14,7 +14,7 @@ export default function KanbanView({
   onStatusChange,
   onNotesChange,
   onFieldsChange,
-  onArchiveTicket,
+  onDeleteTicket,
   onAddTicket,
   getFieldsFor,
 }) {
@@ -34,8 +34,9 @@ export default function KanbanView({
     return sorted
   }
 
-  const bulkArchive = () => {
-    selected.forEach((id) => onArchiveTicket(id))
+  const bulkDelete = () => {
+    if (!window.confirm(`Delete ${selected.length} selected request(s)? This can't be undone.`)) return
+    selected.forEach((id) => onDeleteTicket(id))
     clearSelection()
   }
 
@@ -68,8 +69,8 @@ export default function KanbanView({
           <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-medium">
             {selected.length} selected
           </span>
-          <button onClick={bulkArchive} className="text-amber-600 hover:text-amber-800 underline">
-            Archive selected
+          <button onClick={bulkDelete} className="text-red-500 hover:text-red-700 underline">
+            Delete selected
           </button>
           <button onClick={clearSelection} className="text-slate-500 hover:text-slate-800 underline">
             Deselect all
@@ -185,7 +186,7 @@ export default function KanbanView({
                               onStatusChange={onStatusChange}
                               onNotesChange={onNotesChange}
                               onFieldsChange={onFieldsChange}
-                              onArchive={onArchiveTicket}
+                              onDelete={onDeleteTicket}
                               selected={selected.includes(ticket.id)}
                               onSelect={(id, e) => handleSelect(id, e, orderedIds)}
                               visibleFields={getFieldsFor(ticket.category || 'School')}
@@ -214,7 +215,7 @@ function MiniAddForm({ onSubmit, onCancel, defaultCategory = 'School' }) {
   const [category, setCategory] = useState(defaultCategory)
 
   const submit = () => {
-    if (!name.trim() || !problem.trim()) return
+    if (!problem.trim()) return
     onSubmit({ name, email: '', problem, category })
   }
 
