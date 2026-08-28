@@ -75,9 +75,18 @@ export default function HelpForm() {
         className="bg-white shadow-md rounded-2xl p-8 w-full max-w-md space-y-5"
       >
         <div>
-          <h1 className="text-2xl font-semibold text-slate-800">IT Help Desk</h1>
+          <img
+            src="/School-logo.png"
+            alt=""
+            className="h-10 w-10 mb-2"
+            style={{ filter: 'brightness(0) saturate(100%)' }}
+          />
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
+            St. Mary Catholic School
+          </p>
+          <h1 className="text-2xl font-semibold text-slate-800">IT Request</h1>
           <p className="text-slate-500 text-sm mt-1">
-            Submit a ticket and we'll get back to you.
+            Submit ticket for St. Mary Catholic School
           </p>
         </div>
 

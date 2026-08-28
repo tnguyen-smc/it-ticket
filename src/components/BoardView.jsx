@@ -14,6 +14,7 @@ export default function BoardView() {
   const [isPanning, setIsPanning] = useState(false)
   const [connectMode, setConnectMode] = useState(false)
   const [connectFrom, setConnectFrom] = useState(null)
+  const [showArchive, setShowArchive] = useState(false)
 
   const panStart = useRef({ x: 0, y: 0 })
   const panOrigin = useRef({ x: 0, y: 0 })
@@ -204,6 +205,16 @@ export default function BoardView() {
     await supabase.from('board_items').delete().eq('id', id)
   }
 
+  const archiveCard = async (id) => {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, archived: true } : it)))
+    await supabase.from('board_items').update({ archived: true }).eq('id', id)
+  }
+
+  const restoreCard = async (id) => {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, archived: false } : it)))
+    await supabase.from('board_items').update({ archived: false }).eq('id', id)
+  }
+
   const handleCardClick = async (card) => {
     if (!connectMode) return
     if (!connectFrom) {
@@ -230,14 +241,31 @@ export default function BoardView() {
 
   const cardCenter = (card) => ({ x: card.x + card.width / 2, y: card.y + (card.height || 200) / 2 })
 
-  const bounds = items.reduce(
+  const visibleItems = items.filter((it) => !it.archived)
+  const archivedItems = items.filter((it) => it.archived)
+
+  const viewportW = containerRef.current?.clientWidth || 0
+  const viewportH = containerRef.current?.clientHeight || 0
+  const viewWorldTL = { x: -pan.x / zoom, y: -pan.y / zoom }
+  const viewWorldBR = { x: (viewportW - pan.x) / zoom, y: (viewportH - pan.y) / zoom }
+
+  // Bounds cover every card AND the current viewport, so the minimap always
+  // represents the whole canvas rather than clipping to just the cards (which
+  // could leave the "you are here" box drifting off the map when panning into
+  // empty space).
+  const bounds = visibleItems.reduce(
     (acc, it) => ({
       minX: Math.min(acc.minX, it.x),
       minY: Math.min(acc.minY, it.y),
       maxX: Math.max(acc.maxX, it.x + it.width),
       maxY: Math.max(acc.maxY, it.y + (it.height || 200)),
     }),
-    { minX: 0, minY: 0, maxX: 400, maxY: 400 }
+    {
+      minX: Math.min(0, viewWorldTL.x),
+      minY: Math.min(0, viewWorldTL.y),
+      maxX: Math.max(400, viewWorldBR.x),
+      maxY: Math.max(400, viewWorldBR.y),
+    }
   )
 
   return (
@@ -265,6 +293,12 @@ export default function BoardView() {
         <div className="bg-white shadow-sm border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-400 flex items-center gap-1.5">
           Zoom {Math.round(zoom * 100)}%
         </div>
+        <button
+          onClick={() => setShowArchive(true)}
+          className="bg-white shadow-sm border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-slate-50 flex items-center gap-1.5"
+        >
+          🗃️ Archive {archivedItems.length > 0 && `(${archivedItems.length})`}
+        </button>
       </div>
 
       <div
@@ -297,8 +331,8 @@ export default function BoardView() {
             style={{ left: 0, top: 0, width: 1, height: 1 }}
           >
             {connections.map((conn) => {
-              const from = items.find((it) => it.id === conn.from_id)
-              const to = items.find((it) => it.id === conn.to_id)
+              const from = visibleItems.find((it) => it.id === conn.from_id)
+              const to = visibleItems.find((it) => it.id === conn.to_id)
               if (!from || !to) return null
               const a = cardCenter(from)
               const b = cardCenter(to)
@@ -318,7 +352,7 @@ export default function BoardView() {
             })}
           </svg>
 
-          {items.map((card) => (
+          {visibleItems.map((card) => (
             <BoardCard
               key={card.id}
               card={card}
@@ -328,15 +362,16 @@ export default function BoardView() {
               onResizeStart={(e) => startCardResize(e, card)}
               onUpdate={(patch) => updateCard(card.id, patch)}
               onDelete={() => deleteCard(card.id)}
+              onArchive={() => archiveCard(card.id)}
               onCardClick={() => handleCardClick(card)}
             />
           ))}
         </div>
       </div>
 
-      {items.length > 0 && (
+      {visibleItems.length > 0 && (
         <Minimap
-          items={items}
+          items={visibleItems}
           bounds={bounds}
           pan={pan}
           zoom={zoom}
@@ -347,14 +382,77 @@ export default function BoardView() {
           }}
         />
       )}
+
+      {showArchive && (
+        <ArchivePanel
+          items={archivedItems}
+          onClose={() => setShowArchive(false)}
+          onRestore={restoreCard}
+          onDeletePermanently={deleteCard}
+        />
+      )}
+    </div>
+  )
+}
+
+function ArchivePanel({ items, onClose, onRestore, onDeletePermanently }) {
+  return (
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 px-4">
+      <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-slate-800">Archived Cards</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
+            ✕
+          </button>
+        </div>
+
+        {items.length === 0 ? (
+          <p className="text-sm text-slate-400">No archived cards yet.</p>
+        ) : (
+          <div className="space-y-2 overflow-y-auto">
+            {items.map((it) => (
+              <div
+                key={it.id}
+                className="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: it.color }}
+                  />
+                  <span className="text-sm text-slate-700 truncate">{it.title}</span>
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => onRestore(it.id)}
+                    className="text-xs text-blue-600 hover:text-blue-800"
+                  >
+                    Restore
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Permanently delete this card? This can\'t be undone.')) {
+                        onDeletePermanently(it.id)
+                      }
+                    }}
+                    className="text-xs text-red-500 hover:text-red-700"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
 function Minimap({ items, bounds, pan, zoom, setPan, viewportSize }) {
-  const MAP_W = 160
-  const MAP_H = 110
-  const padding = 40
+  const MAP_W = 200
+  const MAP_H = 140
+  const padding = 80
   const mapRef = useRef(null)
   const [dragging, setDragging] = useState(false)
 
@@ -443,7 +541,7 @@ function Minimap({ items, bounds, pan, zoom, setPan, viewportSize }) {
   )
 }
 
-function BoardCard({ card, onDragStart, onResizeStart, onUpdate, onDelete, connectMode, isConnectSource, onCardClick }) {
+function BoardCard({ card, onDragStart, onResizeStart, onUpdate, onDelete, onArchive, connectMode, isConnectSource, onCardClick }) {
   const [title, setTitle] = useState(card.title)
   const [showColorPicker, setShowColorPicker] = useState(false)
 
@@ -500,6 +598,18 @@ function BoardCard({ card, onDragStart, onResizeStart, onUpdate, onDelete, conne
                 .map((it) => (it.id === itemId ? { ...it, done: !it.done } : it))
                 .sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1)),
             }
+          : l
+      )
+    )
+  }
+
+  // Strikeout is separate from "done": it just crosses out the text visually
+  // without marking it complete or sinking it to the bottom of the list.
+  const toggleStrike = (listId, itemId) => {
+    updateLists(
+      lists.map((l) =>
+        l.id === listId
+          ? { ...l, items: l.items.map((it) => (it.id === itemId ? { ...it, struck: !it.struck } : it)) }
           : l
       )
     )
@@ -592,9 +702,17 @@ function BoardCard({ card, onDragStart, onResizeStart, onUpdate, onDelete, conne
         />
         <button
           onMouseDown={(e) => e.stopPropagation()}
+          onClick={onArchive}
+          className="text-slate-500 hover:text-slate-800 ml-2 flex-shrink-0"
+          title="Archive card"
+        >
+          🗃️
+        </button>
+        <button
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={onDelete}
-          className="text-slate-500 hover:text-red-500 ml-2 flex-shrink-0"
-          title="Delete card"
+          className="text-slate-500 hover:text-red-500 ml-1 flex-shrink-0"
+          title="Delete card permanently"
         >
           ✕
         </button>
@@ -609,6 +727,7 @@ function BoardCard({ card, onDragStart, onResizeStart, onUpdate, onDelete, conne
             onDeleteList={() => deleteList(list.id)}
             onAddItem={(text) => addListItem(list.id, text)}
             onToggleItem={(itemId) => toggleItem(list.id, itemId)}
+            onToggleStrike={(itemId) => toggleStrike(list.id, itemId)}
             onRemoveItem={(itemId) => removeItem(list.id, itemId)}
             onAddFile={(file) => addFile(list.id, file)}
             onRemoveFile={(fileId) => removeFile(list.id, fileId)}
@@ -649,6 +768,7 @@ function ListBlock({
   onDeleteList,
   onAddItem,
   onToggleItem,
+  onToggleStrike,
   onRemoveItem,
   onAddFile,
   onRemoveFile,
@@ -771,6 +891,7 @@ function ListBlock({
       <div className="space-y-1">
         {list.items.map((it) => {
           if (it.style === 'number' && !it.done) numberCounter += 1
+          const struckOrDone = it.done || it.struck
           return (
             <div key={it.id} className="flex items-center gap-2 group">
               <input
@@ -790,16 +911,26 @@ function ListBlock({
                     target="_blank"
                     rel="noopener noreferrer"
                     onMouseDown={(e) => e.stopPropagation()}
-                    className={`underline ${it.done ? 'line-through text-slate-400' : 'text-blue-600'}`}
+                    className={`underline ${struckOrDone ? 'line-through text-slate-400' : 'text-blue-600'}`}
                   >
                     {it.text}
                   </a>
                 ) : (
-                  <span className={it.done ? 'line-through text-slate-500' : 'text-slate-700'}>
+                  <span className={struckOrDone ? 'line-through text-slate-500' : 'text-slate-700'}>
                     {it.text}
                   </span>
                 )}
               </span>
+              <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => onToggleStrike(it.id)}
+                title="Strike through"
+                className={`text-xs px-1 opacity-0 group-hover:opacity-100 ${
+                  it.struck ? 'text-slate-600 opacity-100' : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                <s>S</s>
+              </button>
               <button
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => onRemoveItem(it.id)}
@@ -816,8 +947,7 @@ function ListBlock({
             value={newItemText}
             onChange={(e) => setNewItemText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submitItem()}
-            placeholder="+ add item"
-            className="w-full bg-transparent border-b border-white/40 focus:border-slate-400 px-0.5 py-1 text-xs outline-none placeholder:text-slate-500/60"
+            className="w-full bg-transparent border-b border-white/40 focus:border-slate-400 px-0.5 py-1 text-xs outline-none"
           />
         </div>
       </div>
