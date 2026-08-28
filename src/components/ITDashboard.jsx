@@ -4,12 +4,15 @@ import ListView from './ListView'
 import KanbanView from './KanbanView'
 import BoardView from './BoardView'
 import Sidebar from './Sidebar'
+import SettingsPanel from './SettingsPanel'
+import { useDisplaySettings } from '../hooks/useDisplaySettings'
 
 export default function ITDashboard({ session }) {
-  const [view, setView] = useState('kanban') // 'list' | 'kanban' | 'board'
+  const [view, setView] = useState('kanban') // 'list' | 'kanban' | 'board' | 'settings'
   const [category, setCategory] = useState('All') // 'All' | 'School' | 'Parish'
   const [tickets, setTickets] = useState([])
   const [groups, setGroups] = useState([])
+  const { settings, update: updateDisplaySetting, getFieldsFor } = useDisplaySettings()
 
   useEffect(() => {
     fetchAll()
@@ -70,6 +73,11 @@ export default function ITDashboard({ session }) {
     if (error) console.error(error)
   }
 
+  const updateTicketFields = async (ticketId, fields) => {
+    const { error } = await supabase.from('tickets').update(fields).eq('id', ticketId)
+    if (error) console.error(error)
+  }
+
   const deleteTicket = async (ticketId) => {
     const { error } = await supabase.from('tickets').delete().eq('id', ticketId)
     if (error) console.error(error)
@@ -116,6 +124,15 @@ export default function ITDashboard({ session }) {
                 {v === 'board' ? 'Thought Board' : v}
               </button>
             ))}
+            <button
+              onClick={() => setView('settings')}
+              title="Display settings"
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${
+                view === 'settings' ? 'bg-white text-slate-900 shadow' : 'text-white/80'
+              }`}
+            >
+              ⚙️
+            </button>
           </div>
 
           <button
@@ -127,26 +144,30 @@ export default function ITDashboard({ session }) {
         </div>
       </header>
 
-      {/* School / Parish divider */}
-      <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center gap-2">
-        <span className="text-xs text-slate-400 mr-1">Showing:</span>
-        {['All', 'School', 'Parish'].map((c) => (
-          <button
-            key={c}
-            onClick={() => setCategory(c)}
-            className={`text-xs font-medium px-3 py-1 rounded-full transition ${
-              category === c
-                ? 'bg-slate-800 text-white'
-                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-            }`}
-          >
-            {c}
-          </button>
-        ))}
-      </div>
+      {/* School / Parish divider — hidden on the Thought Board, which is personal/unfiled */}
+      {view !== 'board' && view !== 'settings' && (
+        <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center gap-2">
+          <span className="text-xs text-slate-400 mr-1">Showing:</span>
+          {['All', 'School', 'Parish'].map((c) => (
+            <button
+              key={c}
+              onClick={() => setCategory(c)}
+              className={`text-xs font-medium px-3 py-1 rounded-full transition ${
+                category === c
+                  ? 'bg-slate-800 text-white'
+                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
-        {view !== 'board' && <Sidebar tickets={filteredTickets} groups={groups} />}
+        {(view === 'list' || view === 'kanban') && (
+          <Sidebar tickets={filteredTickets} groups={groups} />
+        )}
 
         <main className="flex-1 px-4 py-6 overflow-auto">
           {view === 'list' && (
@@ -156,21 +177,29 @@ export default function ITDashboard({ session }) {
               onGroupsChange={fetchGroups}
               onStatusChange={updateTicketStatus}
               onNotesChange={updateTicketNotes}
+              onFieldsChange={updateTicketFields}
               onDeleteTicket={deleteTicket}
               onAddTicket={addTicket}
+              getFieldsFor={getFieldsFor}
             />
           )}
           {view === 'kanban' && (
             <KanbanView
               tickets={filteredTickets}
               groups={groups}
+              category={category}
               onStatusChange={updateTicketStatus}
               onNotesChange={updateTicketNotes}
+              onFieldsChange={updateTicketFields}
               onDeleteTicket={deleteTicket}
               onAddTicket={addTicket}
+              getFieldsFor={getFieldsFor}
             />
           )}
           {view === 'board' && <BoardView />}
+          {view === 'settings' && (
+            <SettingsPanel settings={settings} onUpdate={updateDisplaySetting} />
+          )}
         </main>
       </div>
     </div>

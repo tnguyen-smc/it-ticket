@@ -22,10 +22,21 @@ create table if not exists board_items (
 
 alter table board_items enable row level security;
 
+drop policy if exists "Public can manage board items" on board_items;
 create policy "Public can manage board items" on board_items
   for all using (true);
 
-alter publication supabase_realtime add table board_items;
+-- Only add to realtime publication if not already present (avoids
+-- "relation is already member of publication" errors on reruns)
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'board_items'
+  ) then
+    alter publication supabase_realtime add table board_items;
+  end if;
+end $$;
 
 -- Suggested starting colors for the four default groups (optional, run once)
 update ticket_groups set color = '#93C5A3' where name = 'New';

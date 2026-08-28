@@ -25,9 +25,24 @@ insert into ticket_groups (name, sort_order) values
   ('Resolved', 3)
 on conflict do nothing;
 
--- Enable realtime so the dashboard updates instantly without refreshing
-alter publication supabase_realtime add table tickets;
-alter publication supabase_realtime add table ticket_groups;
+-- Only add to realtime publication if not already present (avoids
+-- "relation is already member of publication" errors on reruns)
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'tickets'
+  ) then
+    alter publication supabase_realtime add table tickets;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'ticket_groups'
+  ) then
+    alter publication supabase_realtime add table ticket_groups;
+  end if;
+end $$;
 
 -- Row Level Security
 alter table tickets enable row level security;
@@ -40,17 +55,26 @@ alter table ticket_groups enable row level security;
 -- auth.jwt() ->> 'email' against your school domain for update/delete on tickets
 -- and all operations on ticket_groups.
 
+drop policy if exists "Public can insert tickets" on tickets;
 create policy "Public can insert tickets" on tickets
   for insert with check (true);
 
+drop policy if exists "Public can read tickets" on tickets;
 create policy "Public can read tickets" on tickets
   for select using (true);
 
+drop policy if exists "Public can update tickets" on tickets;
 create policy "Public can update tickets" on tickets
   for update using (true);
 
+drop policy if exists "Public can delete tickets" on tickets;
+create policy "Public can delete tickets" on tickets
+  for delete using (true);
+
+drop policy if exists "Public can read groups" on ticket_groups;
 create policy "Public can read groups" on ticket_groups
   for select using (true);
 
+drop policy if exists "Public can write groups" on ticket_groups;
 create policy "Public can write groups" on ticket_groups
   for all using (true);

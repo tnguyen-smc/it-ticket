@@ -37,6 +37,72 @@ to recreate the project structure by pasting in each file's contents.
   Deleting is permanent — there's no undo, so use with care especially on bulk
   selections.
 
+## 2e. Applying the v5 refinements (edit requests, shared quick-status, note preview)
+
+Run **`supabase/migration_v6.sql`** — it adds a `show_in_summary` flag on
+`ticket_groups`, moving "Quick Status" configuration out of per-browser localStorage
+and into the database so it's shared between the admin Sidebar and the public
+`/help` page.
+
+- **Edit requests** — a small pencil icon on each ticket card opens inline editing
+  for the name and problem/request text, with Save/Cancel. Useful for cleaning up
+  or clarifying what a requester typed.
+- **Public quick status on `/help`** — now shows the actual request text ("title")
+  under each visible status, not just a count. Which statuses appear is controlled
+  entirely from the admin Sidebar's "Configure" panel — the public view has no
+  configuration controls of its own. Internal notes are never fetched or shown here.
+- **Note preview** — once a note is saved, it now displays as grey preview text
+  right on the card (matching the "Add note" ghost-text style) instead of just a
+  small dot, so you can see the note content at a glance without opening the editor.
+
+## 2d. Applying the v4 update (Thought Board overhaul, Kanban rows, settings, more)
+
+Run **`supabase/migration_v5.sql`** in the SQL Editor — it restructures board cards to
+support multiple checklists per card and adds a `board_connections` table for the
+connector lines.
+
+What's new:
+
+- **Fixed: drag ghost/cursor** — dragging a ticket card no longer shows the browser's
+  default "photo" ghost image or a green "+" cursor; it now just dims the card while
+  dragging, like a native app.
+- **Fixed: Kanban status dropdown cutoff** — the dropdown now measures available space
+  and flips upward automatically if it would run off the bottom of the screen.
+- **Thought Board is now a true infinite canvas** — no more page scrolling. Drag the
+  background to pan, or use your trackpad/mouse wheel to scroll in any direction
+  (including diagonally). Pinch-to-zoom (or Ctrl/Cmd + scroll) zooms in and out,
+  centered on your cursor.
+- **Fixed: card "teleport" while dragging** — card dragging now tracks the actual
+  mouse delta instead of mixing in the canvas pan, so cards follow your cursor exactly.
+- **Board card improvements:**
+  - Delete button (✕) in place of the old "Reset View" button
+  - Checking off a list item now sinks it to the bottom of its list automatically
+  - Click the small color dot on a card's header to recolor it
+  - **Multiple checklists per card** — "+ Add list" adds another titled checklist
+    inside the same card
+  - Paste a URL as a list item and it renders as a clickable link
+  - "+ Add image (URL)" lets you drop in an image by pasting its link. Note: this
+    is URL-based, not a file upload — direct file/image uploads would need a
+    Supabase Storage bucket wired up, which isn't included yet. Ask if you'd like
+    that added.
+  - **Connect Cards** — click the button, then click two cards to draw a line
+    between them (useful for mapping out a process). Click a line to delete it.
+  - A small **minimap** appears bottom-right while you're panning, showing all
+    your cards and your current viewport.
+  - Normal cursor while hovering the canvas; it only shows a "grabbing" hand while
+    you're actively panning.
+  - The category filter bar (All/School/Parish) is hidden on the Thought Board
+    since it's meant to be a personal, unfiled space.
+- **Kanban split by category** — when "All" is selected, the board now shows two
+  stacked rows: School on top, Parish below, each with the same status columns.
+  Switch to "School" or "Parish" only to see a single row.
+- **Display Settings (⚙️ tab)** — choose which fields show on ticket cards, set
+  independently for School vs. Parish requests (e.g. hide name/email on School
+  tickets and only show the problem + date). Saved per-browser.
+- **Public queue summary on `/help`** — anyone submitting a ticket now sees a small
+  panel showing how many requests are in each status, so they have a general sense
+  of where things stand. It only shows counts, never individual ticket details.
+
 ## 2c. Applying the v3 update (internal notes on tickets)
 
 Run **`supabase/migration_v3.sql`** in the SQL Editor — it adds a `notes` column to

@@ -1,13 +1,25 @@
 import { useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence } from 'framer-motion'
 import TicketCard from './TicketCard'
 import GroupManager from './GroupManager'
 import { hexToRgba } from '../lib/colors'
 import { useMultiSelect } from '../hooks/useMultiSelect'
+import { cleanDragStart } from '../lib/dragHelpers'
 
-export default function ListView({ tickets, groups, onGroupsChange, onStatusChange, onNotesChange, onDeleteTicket, onAddTicket }) {
+export default function ListView({
+  tickets,
+  groups,
+  onGroupsChange,
+  onStatusChange,
+  onNotesChange,
+  onFieldsChange,
+  onDeleteTicket,
+  onAddTicket,
+  getFieldsFor,
+}) {
   const [managingGroups, setManagingGroups] = useState(false)
   const [addingTo, setAddingTo] = useState(null)
+  const [draggingId, setDraggingId] = useState(null)
   const { selected, handleSelect, clearSelection } = useMultiSelect()
 
   const orderedIds = tickets.map((t) => t.id)
@@ -17,6 +29,7 @@ export default function ListView({ tickets, groups, onGroupsChange, onStatusChan
     const ids = selected.length > 0 ? selected : [e.dataTransfer.getData('ticketId')]
     ids.filter(Boolean).forEach((id) => onStatusChange(id, status))
     clearSelection()
+    setDraggingId(null)
   }
 
   const bulkDelete = () => {
@@ -33,16 +46,10 @@ export default function ListView({ tickets, groups, onGroupsChange, onStatusChan
             <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-medium">
               {selected.length} selected
             </span>
-            <button
-              onClick={bulkDelete}
-              className="text-red-500 hover:text-red-700 underline"
-            >
+            <button onClick={bulkDelete} className="text-red-500 hover:text-red-700 underline">
               Delete selected
             </button>
-            <button
-              onClick={clearSelection}
-              className="text-slate-500 hover:text-slate-800 underline"
-            >
+            <button onClick={clearSelection} className="text-slate-500 hover:text-slate-800 underline">
               Deselect all
             </button>
           </div>
@@ -83,10 +90,7 @@ export default function ListView({ tickets, groups, onGroupsChange, onStatusChan
                 style={{ backgroundColor: hexToRgba(group.color, 0.12) }}
               >
                 <div className="flex items-center gap-2">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full"
-                    style={{ backgroundColor: group.color }}
-                  />
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: group.color }} />
                   <h2 className="font-semibold text-slate-700">{group.name}</h2>
                 </div>
                 <div className="flex items-center gap-3">
@@ -119,16 +123,24 @@ export default function ListView({ tickets, groups, onGroupsChange, onStatusChan
                     <div
                       key={ticket.id}
                       draggable
-                      onDragStart={(e) => e.dataTransfer.setData('ticketId', ticket.id)}
+                      onDragStart={(e) => {
+                        cleanDragStart(e)
+                        e.dataTransfer.setData('ticketId', ticket.id)
+                        setDraggingId(ticket.id)
+                      }}
+                      onDragEnd={() => setDraggingId(null)}
+                      className={draggingId === ticket.id ? 'opacity-40' : ''}
                     >
                       <TicketCard
                         ticket={ticket}
                         groups={groups}
                         onStatusChange={onStatusChange}
                         onNotesChange={onNotesChange}
+                        onFieldsChange={onFieldsChange}
                         onDelete={onDeleteTicket}
                         selected={selected.includes(ticket.id)}
                         onSelect={(id, e) => handleSelect(id, e, orderedIds)}
+                        visibleFields={getFieldsFor(ticket.category || 'School')}
                       />
                     </div>
                   ))}
@@ -189,10 +201,7 @@ function QuickAddForm({ onSubmit, onCancel }) {
           <button onClick={onCancel} className="text-xs text-slate-500 px-2 py-1">
             Cancel
           </button>
-          <button
-            onClick={submit}
-            className="text-xs bg-slate-800 text-white rounded-md px-3 py-1.5"
-          >
+          <button onClick={submit} className="text-xs bg-slate-800 text-white rounded-md px-3 py-1.5">
             Add Ticket
           </button>
         </div>
