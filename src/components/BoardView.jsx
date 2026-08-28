@@ -297,7 +297,7 @@ export default function BoardView() {
           onClick={() => setShowArchive(true)}
           className="bg-white shadow-sm border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-slate-50 flex items-center gap-1.5"
         >
-          🗃️ Archive {archivedItems.length > 0 && `(${archivedItems.length})`}
+          Archived {archivedItems.length > 0 && `(${archivedItems.length})`}
         </button>
       </div>
 
@@ -400,7 +400,7 @@ function ArchivePanel({ items, onClose, onRestore, onDeletePermanently }) {
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 px-4">
       <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-slate-800">Archived Cards</h3>
+          <h3 className="font-semibold text-slate-800">Archived</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
             ✕
           </button>
@@ -706,7 +706,14 @@ function BoardCard({ card, onDragStart, onResizeStart, onUpdate, onDelete, onArc
           className="text-slate-500 hover:text-slate-800 ml-2 flex-shrink-0"
           title="Archive card"
         >
-          🗃️
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5 8h14M5 8a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v1a2 2 0 01-2 2M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8M10 12h4"
+            />
+          </svg>
         </button>
         <button
           onMouseDown={(e) => e.stopPropagation()}

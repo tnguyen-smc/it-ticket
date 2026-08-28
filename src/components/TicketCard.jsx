@@ -10,7 +10,7 @@ export default function TicketCard({
   onStatusChange,
   onNotesChange,
   onFieldsChange,
-  onDelete,
+  onArchive,
   selected,
   onSelect,
   draggable = true,
@@ -20,7 +20,6 @@ export default function TicketCard({
   const categoryColor = ticket.category === 'Parish' ? '#C7A9DC' : '#8FB4DB'
   const [notesOpen, setNotesOpen] = useState(false)
   const [notesDraft, setNotesDraft] = useState(ticket.notes || '')
-  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [editing, setEditing] = useState(false)
   const [nameDraft, setNameDraft] = useState(ticket.name || '')
   const [problemDraft, setProblemDraft] = useState(ticket.problem || '')
@@ -163,29 +162,6 @@ export default function TicketCard({
         </div>
       )}
 
-      {confirmingDelete && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="mb-2 bg-red-50 border border-red-200 rounded-md px-2 py-2 flex items-center justify-between gap-2"
-        >
-          <span className="text-xs text-red-700">Delete this request?</span>
-          <div className="flex gap-1.5 flex-shrink-0">
-            <button
-              onClick={() => setConfirmingDelete(false)}
-              className="text-xs text-slate-500 px-2 py-1 hover:text-slate-700"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => onDelete(ticket.id)}
-              className="text-xs bg-red-600 text-white rounded px-2 py-1 hover:bg-red-700"
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      )}
-
       {visibleFields.notes && (
         <div onClick={(e) => e.stopPropagation()} className="mb-2">
           <button
@@ -243,10 +219,10 @@ export default function TicketCard({
           <button
             onClick={(e) => {
               e.stopPropagation()
-              setConfirmingDelete(true)
+              onArchive(ticket.id)
             }}
-            className="text-slate-300 hover:text-red-500 p-1"
-            title="Delete request"
+            className="text-slate-300 hover:text-amber-600 p-1"
+            title="Archive request"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path

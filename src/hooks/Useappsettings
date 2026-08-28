@@ -1,0 +1,37 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '../supabaseClient'
+
+const DEFAULTS = { defaultIntakeGroup: 'New', sortMode: 'date' }
+
+export function useAppSettings() {
+  const [settings, setSettings] = useState(DEFAULTS)
+
+  useEffect(() => {
+    fetchSettings()
+
+    const sub = supabase
+      .channel('app-settings-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, fetchSettings)
+      .subscribe()
+
+    return () => supabase.removeChannel(sub)
+  }, [])
+
+  const fetchSettings = async () => {
+    const { data, error } = await supabase.from('app_settings').select('*').eq('key', 'global').single()
+    if (error) {
+      console.error(error)
+      return
+    }
+    if (data) setSettings({ ...DEFAULTS, ...data.value })
+  }
+
+  const update = async (patch) => {
+    const next = { ...settings, ...patch }
+    setSettings(next)
+    const { error } = await supabase.from('app_settings').upsert({ key: 'global', value: next })
+    if (error) console.error(error)
+  }
+
+  return { settings, update }
+}

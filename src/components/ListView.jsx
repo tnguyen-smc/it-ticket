@@ -9,11 +9,12 @@ import { cleanDragStart } from '../lib/dragHelpers'
 export default function ListView({
   tickets,
   groups,
+  sortMode = 'date',
   onGroupsChange,
   onStatusChange,
   onNotesChange,
   onFieldsChange,
-  onDeleteTicket,
+  onArchiveTicket,
   onAddTicket,
   getFieldsFor,
 }) {
@@ -24,6 +25,16 @@ export default function ListView({
 
   const orderedIds = tickets.map((t) => t.id)
 
+  const sortTickets = (list) => {
+    const sorted = [...list]
+    if (sortMode === 'alpha') {
+      sorted.sort((a, b) => (a.problem || '').localeCompare(b.problem || ''))
+    } else {
+      sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    }
+    return sorted
+  }
+
   const handleDrop = (e, status) => {
     e.preventDefault()
     const ids = selected.length > 0 ? selected : [e.dataTransfer.getData('ticketId')]
@@ -32,9 +43,8 @@ export default function ListView({
     setDraggingId(null)
   }
 
-  const bulkDelete = () => {
-    if (!window.confirm(`Delete ${selected.length} selected request(s)? This can't be undone.`)) return
-    selected.forEach((id) => onDeleteTicket(id))
+  const bulkArchive = () => {
+    selected.forEach((id) => onArchiveTicket(id))
     clearSelection()
   }
 
@@ -46,8 +56,8 @@ export default function ListView({
             <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-medium">
               {selected.length} selected
             </span>
-            <button onClick={bulkDelete} className="text-red-500 hover:text-red-700 underline">
-              Delete selected
+            <button onClick={bulkArchive} className="text-amber-600 hover:text-amber-800 underline">
+              Archive selected
             </button>
             <button onClick={clearSelection} className="text-slate-500 hover:text-slate-800 underline">
               Deselect all
@@ -76,7 +86,7 @@ export default function ListView({
 
       <div className="space-y-6">
         {groups.map((group) => {
-          const groupTickets = tickets.filter((t) => t.status === group.name)
+          const groupTickets = sortTickets(tickets.filter((t) => t.status === group.name))
           return (
             <motion.div
               layout
@@ -139,7 +149,7 @@ export default function ListView({
                         onStatusChange={onStatusChange}
                         onNotesChange={onNotesChange}
                         onFieldsChange={onFieldsChange}
-                        onDelete={onDeleteTicket}
+                        onArchive={onArchiveTicket}
                         selected={selected.includes(ticket.id)}
                         onSelect={(id, e) => handleSelect(id, e, orderedIds)}
                         visibleFields={getFieldsFor(ticket.category || 'School')}

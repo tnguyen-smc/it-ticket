@@ -12,11 +12,23 @@ export default function HelpForm() {
     setStatus('sending')
     const timestamp = new Date().toISOString()
 
+    // Look up the admin-configured default intake group; fall back to "New"
+    // if nothing's been set (e.g. brand new install, migration not yet run).
+    let intakeStatus = 'New'
+    const { data: settingsRow } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'global')
+      .single()
+    if (settingsRow?.value?.defaultIntakeGroup) {
+      intakeStatus = settingsRow.value.defaultIntakeGroup
+    }
+
     const { error } = await supabase.from('tickets').insert({
       name: '',
       email: '',
       problem,
-      status: 'New',
+      status: intakeStatus,
       created_at: timestamp,
     })
 
@@ -74,20 +86,22 @@ export default function HelpForm() {
         onSubmit={handleSubmit}
         className="bg-white shadow-md rounded-2xl p-8 w-full max-w-md space-y-5"
       >
-        <div>
+        <div className="flex items-center gap-4">
           <img
             src={`${import.meta.env.BASE_URL}School-logo.png`}
             alt=""
-            className="h-10 w-10 mb-2"
+            className="h-14 w-auto flex-shrink-0"
             style={{ filter: 'brightness(0) saturate(100%)' }}
           />
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
-            St. Mary Catholic School
-          </p>
-          <h1 className="text-2xl font-semibold text-slate-800">IT Request</h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Submit ticket for St. Mary Catholic School
-          </p>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
+              St. Mary Catholic School
+            </p>
+            <h1 className="text-2xl font-semibold text-slate-800">IT Request</h1>
+            <p className="text-slate-500 text-sm mt-1">
+              Submit ticket for St. Mary Catholic School
+            </p>
+          </div>
         </div>
 
         <div>
