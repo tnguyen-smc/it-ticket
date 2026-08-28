@@ -119,6 +119,7 @@ export default function ListView({
 
               {addingTo === group.name && (
                 <QuickAddForm
+                  getFieldsFor={getFieldsFor}
                   onCancel={() => setAddingTo(null)}
                   onSubmit={(data) => {
                     onAddTicket({ ...data, status: group.name })
@@ -167,11 +168,12 @@ export default function ListView({
   )
 }
 
-function QuickAddForm({ onSubmit, onCancel }) {
+function QuickAddForm({ onSubmit, onCancel, getFieldsFor }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [problem, setProblem] = useState('')
   const [category, setCategory] = useState('School')
+  const fields = getFieldsFor ? getFieldsFor(category) : { name: true, email: true }
 
   const submit = () => {
     if (!problem.trim()) return
@@ -180,20 +182,26 @@ function QuickAddForm({ onSubmit, onCancel }) {
 
   return (
     <div className="px-4 pb-4 pt-1 bg-slate-50 border-b border-slate-100 space-y-2">
-      <div className="grid grid-cols-2 gap-2">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Name"
-          className="border border-slate-200 rounded-md px-2 py-1.5 text-sm"
-        />
-        <input
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email (optional)"
-          className="border border-slate-200 rounded-md px-2 py-1.5 text-sm"
-        />
-      </div>
+      {(fields.name || fields.email) && (
+        <div className="grid grid-cols-2 gap-2">
+          {fields.name && (
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Name"
+              className="border border-slate-200 rounded-md px-2 py-1.5 text-sm"
+            />
+          )}
+          {fields.email && (
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email (optional)"
+              className="border border-slate-200 rounded-md px-2 py-1.5 text-sm"
+            />
+          )}
+        </div>
+      )}
       <textarea
         value={problem}
         onChange={(e) => setProblem(e.target.value)}

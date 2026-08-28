@@ -156,6 +156,7 @@ export default function KanbanView({
                       <div className="bg-white rounded-lg p-2 mb-2 shadow-sm border border-slate-200">
                         <MiniAddForm
                           defaultCategory={row.filterCategory}
+                          getFieldsFor={getFieldsFor}
                           onCancel={() => setAddingTo(null)}
                           onSubmit={(data) => {
                             onAddTicket({ ...data, status: group.name })
@@ -209,10 +210,11 @@ export default function KanbanView({
   )
 }
 
-function MiniAddForm({ onSubmit, onCancel, defaultCategory = 'School' }) {
+function MiniAddForm({ onSubmit, onCancel, defaultCategory = 'School', getFieldsFor }) {
   const [name, setName] = useState('')
   const [problem, setProblem] = useState('')
   const [category, setCategory] = useState(defaultCategory)
+  const fields = getFieldsFor ? getFieldsFor(category) : { name: true }
 
   const submit = () => {
     if (!problem.trim()) return
@@ -221,12 +223,14 @@ function MiniAddForm({ onSubmit, onCancel, defaultCategory = 'School' }) {
 
   return (
     <div className="space-y-1.5">
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Name"
-        className="w-full border border-slate-200 rounded-md px-2 py-1 text-xs"
-      />
+      {fields.name && (
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Name"
+          className="w-full border border-slate-200 rounded-md px-2 py-1 text-xs"
+        />
+      )}
       <textarea
         value={problem}
         onChange={(e) => setProblem(e.target.value)}
