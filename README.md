@@ -30,6 +30,51 @@ Alternatively, open `https://github.dev/YOUR_USERNAME/it-ticket-app` right after
 creating the empty repo, and use the file explorer's "New File"/"New Folder" buttons
 to recreate the project structure by pasting in each file's contents.
 
+- **Delete requests** — a small trash icon on each ticket card opens an inline
+  confirm ("Delete this request?") before removing it — no accidental deletes. When
+  multiple cards are selected, a "Delete selected" link appears next to "Deselect
+  all" for bulk removal (with a single confirm dialog covering the whole batch).
+  Deleting is permanent — there's no undo, so use with care especially on bulk
+  selections.
+
+## 2c. Applying the v3 update (internal notes on tickets)
+
+Run **`supabase/migration_v3.sql`** in the SQL Editor — it adds a `notes` column to
+`tickets`.
+
+New in this version:
+- **Internal notes** — every ticket card (List and Kanban) has an "Add note" /
+  "Edit note" link. Click it to reveal a small textarea; it autosaves when you click
+  away. A small amber dot shows on the link when a ticket already has a note, so you
+  can spot at a glance which tickets have follow-up context. Notes are staff-only —
+  they're never shown or emailed to the person who submitted the ticket.
+
+## 2b. Applying the v2 feature update (colors, categories, Thought Board)
+
+If you already set up Supabase from `schema.sql`, run **`supabase/migration_v2.sql`**
+in the SQL Editor too — it adds:
+- A `color` column on `ticket_groups` (for colored List/Kanban columns)
+- A `category` column on `tickets` (School vs Parish)
+- A new `board_items` table for the Thought Board (infinite canvas notes)
+
+New features in this version:
+- **Colored groups** — set a color per status group in "Manage Groups"; List and
+  Kanban both reflect it, including the status dropdown on each card.
+- **Kanban column reordering** — drag a column by its header to reorder it.
+- **Multi-select** — click a card to select it (blue border), Shift+click to select
+  a range, drag any selected card to move the whole selection at once. "Deselect
+  all" appears once something is selected.
+- **Manual ticket entry** — "+ Add" on any group/column lets IT staff create a
+  ticket directly without going through `/help`.
+- **Sidebar quick-status panel** — a left-hand panel (List/Kanban views) showing a
+  couple of statuses at a glance; click "Configure" to choose which ones show.
+- **School / Parish divider** — a filter bar under the header to view All, School-only,
+  or Parish-only tickets. New tickets default to "School"; change this when adding a
+  ticket manually, or extend `HelpForm.jsx` to let submitters pick it too.
+- **Thought Board** — a third view: an infinite pannable canvas. Drag the background
+  to pan, "+ Add Card" to drop a sticky note anywhere, give it a title, and add
+  checklist-style line items inside it. Everything saves to Supabase in real time.
+
 ## 2. Create your Supabase project
 
 1. Go to https://supabase.com and create a free project.
@@ -64,14 +109,16 @@ blocks anyone outside your school's domain from seeing the dashboard.
 2. **Email Services** → Add a new service → connect Gmail (or your school's Google
    Workspace Gmail account) via OAuth.
 3. **Email Templates** → create a new template with these variables available to use
-   in the subject/body: `{{name}}`, `{{email}}`, `{{problem}}`, `{{timestamp}}`,
-   `{{to_email}}`.
+   in the subject/body: `{{problem}}`, `{{timestamp}}`, `{{to_email}}`.
+
+   Note: the Help form only collects "How can I help?" — no name or email — so those
+   variables are no longer sent. If you'd like to capture a reply-to contact again
+   later, re-add the fields in `HelpForm.jsx` and pass them into the `emailjs.send()` call.
 
    Example template body:
    ```
    New IT Ticket Submitted
 
-   From: {{name}} ({{email}})
    Submitted: {{timestamp}}
 
    Problem:

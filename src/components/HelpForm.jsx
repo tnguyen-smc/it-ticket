@@ -3,7 +3,7 @@ import emailjs from '@emailjs/browser'
 import { supabase } from '../supabaseClient'
 
 export default function HelpForm() {
-  const [form, setForm] = useState({ name: '', email: '', problem: '' })
+  const [problem, setProblem] = useState('')
   const [status, setStatus] = useState('idle') // idle | sending | done | error
 
   const handleSubmit = async (e) => {
@@ -12,9 +12,9 @@ export default function HelpForm() {
     const timestamp = new Date().toISOString()
 
     const { error } = await supabase.from('tickets').insert({
-      name: form.name,
-      email: form.email,
-      problem: form.problem,
+      name: '',
+      email: '',
+      problem,
       status: 'New',
       created_at: timestamp,
     })
@@ -31,9 +31,7 @@ export default function HelpForm() {
         import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
         {
           to_email: import.meta.env.VITE_ADMIN_EMAIL,
-          name: form.name,
-          email: form.email,
-          problem: form.problem,
+          problem,
           timestamp: new Date(timestamp).toLocaleString(),
         },
         import.meta.env.VITE_EMAILJS_PUBLIC_KEY
@@ -45,7 +43,7 @@ export default function HelpForm() {
     }
 
     setStatus('done')
-    setForm({ name: '', email: '', problem: '' })
+    setProblem('')
   }
 
   if (status === 'done') {
@@ -81,38 +79,14 @@ export default function HelpForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
-          <input
-            required
-            type="text"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          />
-        </div>
-
-        <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">
-            Email Address
-          </label>
-          <input
-            required
-            type="email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
-            What is your IT problem?
+            How can I help?
           </label>
           <textarea
             required
-            rows={6}
-            value={form.problem}
-            onChange={(e) => setForm({ ...form, problem: e.target.value })}
+            rows={7}
+            value={problem}
+            onChange={(e) => setProblem(e.target.value)}
             className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"
             placeholder="Describe what's happening..."
           />

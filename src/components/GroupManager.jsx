@@ -1,31 +1,39 @@
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
+import { PRESET_COLORS } from '../lib/colors'
 
 export default function GroupManager({ groups, onClose, onGroupsChange }) {
   const [localGroups, setLocalGroups] = useState(groups)
   const [newGroupName, setNewGroupName] = useState('')
+  const [openColorPickerId, setOpenColorPickerId] = useState(null)
 
   const addGroup = async () => {
     if (!newGroupName.trim()) return
-    const { error } = await supabase.from('ticket_groups').insert({
+    const nextColor = PRESET_COLORS[localGroups.length % PRESET_COLORS.length]
+    await supabase.from('ticket_groups').insert({
       name: newGroupName.trim(),
       sort_order: localGroups.length,
+      color: nextColor,
     })
-    if (error) console.error(error)
     setNewGroupName('')
     onGroupsChange()
   }
 
   const renameGroup = async (id, name) => {
     if (!name.trim()) return
-    const { error } = await supabase.from('ticket_groups').update({ name }).eq('id', id)
-    if (error) console.error(error)
+    await supabase.from('ticket_groups').update({ name }).eq('id', id)
     onGroupsChange()
   }
 
+  const setColor = async (id, color) => {
+    setLocalGroups((prev) => prev.map((g) => (g.id === id ? { ...g, color } : g)))
+    await supabase.from('ticket_groups').update({ color }).eq('id', id)
+    onGroupsChange()
+    setOpenColorPickerId(null)
+  }
+
   const deleteGroup = async (id) => {
-    const { error } = await supabase.from('ticket_groups').delete().eq('id', id)
-    if (error) console.error(error)
+    await supabase.from('ticket_groups').delete().eq('id', id)
     onGroupsChange()
   }
 
@@ -37,9 +45,7 @@ export default function GroupManager({ groups, onClose, onGroupsChange }) {
     setLocalGroups(newOrder)
 
     await Promise.all(
-      newOrder.map((g, i) =>
-        supabase.from('ticket_groups').update({ sort_order: i }).eq('id', g.id)
-      )
+      newOrder.map((g, i) => supabase.from('ticket_groups').update({ sort_order: i }).eq('id', g.id))
     )
     onGroupsChange()
   }
@@ -51,33 +57,33 @@ export default function GroupManager({ groups, onClose, onGroupsChange }) {
 
         <div className="space-y-2 mb-4">
           {localGroups.map((g, i) => (
-            <div key={g.id} className="flex items-center gap-2">
+            <div key={g.id} className="flex items-center gap-2 relative">
+              <button
+                onClick={() => setOpenColorPickerId(openColorPickerId === g.id ? null : g.id)}
+                className="w-6 h-6 rounded-full flex-shrink-0 border border-black/10"
+                style={{ backgroundColor: g.color }}
+                title="Change color"
+              />
+              {openColorPickerId === g.id && (
+                <div className="absolute top-8 left-0 z-10 bg-white shadow-lg border border-slate-200 rounded-lg p-2 grid grid-cols-4 gap-1.5">
+                  {PRESET_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setColor(g.id, c)}
+                      className="w-6 h-6 rounded-full border border-black/10 hover:scale-110 transition-transform"
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              )}
               <input
                 defaultValue={g.name}
                 onBlur={(e) => renameGroup(g.id, e.target.value)}
                 className="flex-1 border border-slate-200 rounded-md px-2 py-1 text-sm"
               />
-              <button
-                onClick={() => moveGroup(i, -1)}
-                className="text-slate-400 hover:text-slate-700"
-                title="Move up"
-              >
-                ↑
-              </button>
-              <button
-                onClick={() => moveGroup(i, 1)}
-                className="text-slate-400 hover:text-slate-700"
-                title="Move down"
-              >
-                ↓
-              </button>
-              <button
-                onClick={() => deleteGroup(g.id)}
-                className="text-red-400 hover:text-red-600"
-                title="Delete group"
-              >
-                ✕
-              </button>
+              <button onClick={() => moveGroup(i, -1)} className="text-slate-400 hover:text-slate-700">↑</button>
+              <button onClick={() => moveGroup(i, 1)} className="text-slate-400 hover:text-slate-700">↓</button>
+              <button onClick={() => deleteGroup(g.id)} className="text-red-400 hover:text-red-600">✕</button>
             </div>
           ))}
         </div>

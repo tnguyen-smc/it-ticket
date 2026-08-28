@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import ListView from './ListView'
 import KanbanView from './KanbanView'
+import BoardView from './BoardView'
+import Sidebar from './Sidebar'
 
 export default function ITDashboard({ session }) {
-  const [view, setView] = useState('kanban')
+  const [view, setView] = useState('kanban') // 'list' | 'kanban' | 'board'
+  const [category, setCategory] = useState('All') // 'All' | 'School' | 'Parish'
   const [tickets, setTickets] = useState([])
   const [groups, setGroups] = useState([])
 
@@ -62,57 +65,114 @@ export default function ITDashboard({ session }) {
     if (error) console.error(error)
   }
 
+  const updateTicketNotes = async (ticketId, notes) => {
+    const { error } = await supabase.from('tickets').update({ notes }).eq('id', ticketId)
+    if (error) console.error(error)
+  }
+
+  const deleteTicket = async (ticketId) => {
+    const { error } = await supabase.from('tickets').delete().eq('id', ticketId)
+    if (error) console.error(error)
+  }
+
+  const addTicket = async ({ name, email, problem, status, category: cat }) => {
+    const { error } = await supabase.from('tickets').insert({
+      name,
+      email: email || '',
+      problem,
+      status,
+      category: cat || 'School',
+      created_at: new Date().toISOString(),
+    })
+    if (error) console.error(error)
+  }
+
+  const filteredTickets =
+    category === 'All' ? tickets : tickets.filter((t) => (t.category || 'School') === category)
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      <header
+        className="border-b border-black/10 px-6 py-4 flex items-center justify-between"
+        style={{ backgroundColor: '#5C8768' }}
+      >
         <div>
-          <h1 className="text-xl font-semibold text-slate-800">IT Ticket Dashboard</h1>
+          <h1 className="text-xl font-semibold text-white">IT Dashboard</h1>
           {session?.user?.email && (
-            <p className="text-xs text-slate-400 mt-0.5">Signed in as {session.user.email}</p>
+            <p className="text-xs text-white/70 mt-0.5">Signed in as {session.user.email}</p>
           )}
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="flex bg-slate-100 rounded-lg p-1">
-            <button
-              onClick={() => setView('list')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${
-                view === 'list' ? 'bg-white shadow text-slate-900' : 'text-slate-500'
-              }`}
-            >
-              List View
-            </button>
-            <button
-              onClick={() => setView('kanban')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${
-                view === 'kanban' ? 'bg-white shadow text-slate-900' : 'text-slate-500'
-              }`}
-            >
-              Kanban View
-            </button>
+          <div className="flex bg-white/15 rounded-lg p-1">
+            {['list', 'kanban', 'board'].map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition capitalize ${
+                  view === v ? 'bg-white text-slate-900 shadow' : 'text-white/80'
+                }`}
+              >
+                {v === 'board' ? 'Thought Board' : v}
+              </button>
+            ))}
           </div>
 
           <button
             onClick={() => supabase.auth.signOut()}
-            className="text-sm text-slate-400 hover:text-slate-700"
+            className="text-sm text-white/70 hover:text-white"
           >
             Sign out
           </button>
         </div>
       </header>
 
-      <main className="w-full px-4 py-6">
-        {view === 'list' ? (
-          <ListView
-            tickets={tickets}
-            groups={groups}
-            onGroupsChange={fetchGroups}
-            onStatusChange={updateTicketStatus}
-          />
-        ) : (
-          <KanbanView tickets={tickets} groups={groups} onStatusChange={updateTicketStatus} />
-        )}
-      </main>
+      {/* School / Parish divider */}
+      <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center gap-2">
+        <span className="text-xs text-slate-400 mr-1">Showing:</span>
+        {['All', 'School', 'Parish'].map((c) => (
+          <button
+            key={c}
+            onClick={() => setCategory(c)}
+            className={`text-xs font-medium px-3 py-1 rounded-full transition ${
+              category === c
+                ? 'bg-slate-800 text-white'
+                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+            }`}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
+        {view !== 'board' && <Sidebar tickets={filteredTickets} groups={groups} />}
+
+        <main className="flex-1 px-4 py-6 overflow-auto">
+          {view === 'list' && (
+            <ListView
+              tickets={filteredTickets}
+              groups={groups}
+              onGroupsChange={fetchGroups}
+              onStatusChange={updateTicketStatus}
+              onNotesChange={updateTicketNotes}
+              onDeleteTicket={deleteTicket}
+              onAddTicket={addTicket}
+            />
+          )}
+          {view === 'kanban' && (
+            <KanbanView
+              tickets={filteredTickets}
+              groups={groups}
+              onStatusChange={updateTicketStatus}
+              onNotesChange={updateTicketNotes}
+              onDeleteTicket={deleteTicket}
+              onAddTicket={addTicket}
+            />
+          )}
+          {view === 'board' && <BoardView />}
+        </main>
+      </div>
     </div>
   )
 }
