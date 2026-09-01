@@ -192,7 +192,7 @@ function QuickAddForm({ onSubmit, onCancel, getFieldsFor }) {
   return (
     <div className="px-4 pb-4 pt-1 bg-slate-50 border-b border-slate-100 space-y-2">
       {(fields.name || fields.email) && (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {fields.name && (
             <input
               value={name}

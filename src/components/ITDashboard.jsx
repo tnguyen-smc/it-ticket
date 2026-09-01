@@ -13,6 +13,7 @@ export default function ITDashboard({ session }) {
   const [category, setCategory] = useState('All')
   const [tickets, setTickets] = useState([])
   const [groups, setGroups] = useState([])
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const { settings, update: updateDisplaySetting, getFieldsFor } = useDisplaySettings()
   const { settings: appSettings, update: updateAppSettings } = useAppSettings()
 
@@ -109,24 +110,35 @@ export default function ITDashboard({ session }) {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <header
-        className="border-b border-black/10 px-6 py-3 flex items-center justify-between relative"
+        className="border-b border-black/10 px-4 sm:px-6 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3 relative"
         style={{ backgroundColor: '#5C8768' }}
       >
-        <div className="flex items-center gap-3">
-          <img
-            src={`${import.meta.env.BASE_URL}School-logo.png`}
-            alt=""
-            className="h-11 w-auto flex-shrink-0"
-          />
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-white/60 mb-0.5">
-              St. Mary Catholic School
-            </p>
-            <h1 className="text-xl font-semibold text-white">IT Dashboard</h1>
-            {session?.user?.email && (
-              <p className="text-xs text-white/70 mt-0.5">Signed in as {session.user.email}</p>
-            )}
+        <div className="flex items-center justify-between md:justify-start gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <img
+              src={`${import.meta.env.BASE_URL}School-logo.png`}
+              alt=""
+              className="h-8 sm:h-11 w-auto flex-shrink-0"
+            />
+            <div className="min-w-0">
+              <p className="hidden sm:block text-xs font-semibold uppercase tracking-wide text-white/60 mb-0.5">
+                St. Mary Catholic School
+              </p>
+              <h1 className="text-base sm:text-xl font-semibold text-white truncate">IT Dashboard</h1>
+              {session?.user?.email && (
+                <p className="hidden sm:block text-xs text-white/70 mt-0.5 truncate">
+                  Signed in as {session.user.email}
+                </p>
+              )}
+            </div>
           </div>
+
+          <button
+            onClick={() => supabase.auth.signOut()}
+            className="md:hidden text-xs text-white/80 hover:text-white flex-shrink-0"
+          >
+            Sign out
+          </button>
         </div>
 
         <div className="absolute left-1/2 top-0 bottom-0 -translate-x-1/2 hidden md:flex items-center pointer-events-none">
@@ -141,13 +153,13 @@ export default function ITDashboard({ session }) {
           />
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex bg-white/15 rounded-lg p-1">
+        <div className="flex items-center gap-3 sm:gap-4 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+          <div className="flex bg-white/15 rounded-lg p-1 flex-shrink-0">
             {['list', 'kanban', 'board'].map((v) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition capitalize ${
+                className={`px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-medium transition capitalize whitespace-nowrap ${
                   view === v ? 'bg-white text-slate-900 shadow' : 'text-white/80'
                 }`}
               >
@@ -157,7 +169,7 @@ export default function ITDashboard({ session }) {
             <button
               onClick={() => setView('settings')}
               title="Display settings"
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition flex items-center justify-center ${
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition flex items-center justify-center flex-shrink-0 ${
                 view === 'settings' ? 'bg-white text-slate-900 shadow' : 'text-white/80'
               }`}
             >
@@ -167,7 +179,7 @@ export default function ITDashboard({ session }) {
 
           <button
             onClick={() => supabase.auth.signOut()}
-            className="text-sm text-white/70 hover:text-white"
+            className="hidden md:inline text-sm text-white/70 hover:text-white flex-shrink-0"
           >
             Sign out
           </button>
@@ -175,30 +187,62 @@ export default function ITDashboard({ session }) {
       </header>
 
       {view !== 'board' && view !== 'settings' && (
-        <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center gap-2">
-          <span className="text-xs text-slate-400 mr-1">Showing:</span>
-          {['All', 'School', 'Parish'].map((c) => (
+        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-slate-400 mr-1">Showing:</span>
+            {['All', 'School', 'Parish'].map((c) => (
+              <button
+                key={c}
+                onClick={() => setCategory(c)}
+                className={`text-xs font-medium px-3 py-1 rounded-full transition ${
+                  category === c
+                    ? 'bg-slate-800 text-white'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+          {(view === 'list' || view === 'kanban') && (
             <button
-              key={c}
-              onClick={() => setCategory(c)}
-              className={`text-xs font-medium px-3 py-1 rounded-full transition ${
-                category === c
-                  ? 'bg-slate-800 text-white'
-                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-              }`}
+              onClick={() => setMobileSidebarOpen(true)}
+              className="md:hidden text-xs font-medium text-slate-500 border border-slate-300 rounded-full px-3 py-1 flex-shrink-0"
             >
-              {c}
+              Quick Status
             </button>
-          ))}
+          )}
         </div>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         {(view === 'list' || view === 'kanban') && (
-          <Sidebar tickets={filteredTickets} groups={groups} />
+          <div className="hidden md:block">
+            <Sidebar tickets={filteredTickets} groups={groups} />
+          </div>
         )}
 
-        <main className="flex-1 px-4 py-6 overflow-auto">
+        {mobileSidebarOpen && (view === 'list' || view === 'kanban') && (
+          <div className="fixed inset-0 z-40 md:hidden">
+            <div
+              className="absolute inset-0 bg-black/30"
+              onClick={() => setMobileSidebarOpen(false)}
+            />
+            <div className="absolute left-0 top-0 bottom-0 w-72 max-w-[85%] bg-white shadow-xl overflow-y-auto">
+              <div className="flex justify-end p-2 border-b border-slate-100">
+                <button
+                  onClick={() => setMobileSidebarOpen(false)}
+                  className="text-slate-400 hover:text-slate-700 text-sm px-2 py-1"
+                >
+                  Close ✕
+                </button>
+              </div>
+              <Sidebar tickets={filteredTickets} groups={groups} />
+            </div>
+          </div>
+        )}
+
+        <main className="flex-1 px-3 sm:px-4 py-4 sm:py-6 overflow-auto min-w-0">
           {view === 'list' && (
             <ListView
               tickets={filteredTickets}
