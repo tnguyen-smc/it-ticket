@@ -147,6 +147,11 @@ export default function ListView({
                         setDraggingId(ticket.id)
                       }}
                       onDragEnd={() => setDraggingId(null)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.stopPropagation()
+                        handleDrop(e, group.name)
+                      }}
                       className={draggingId === ticket.id ? 'opacity-40' : ''}
                     >
                       <TicketCard

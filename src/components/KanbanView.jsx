@@ -183,6 +183,11 @@ export default function KanbanView({
                               setDraggingId(ticket.id)
                             }}
                             onDragEnd={() => setDraggingId(null)}
+                            onDragOver={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                            }}
+                            onDrop={(e) => handleCardDrop(e)}
                             className={draggingId === ticket.id ? 'opacity-40' : ''}
                           >
                             <TicketCard

@@ -803,6 +803,112 @@ function getCurrentLineTextBeforeCaret(fieldEl) {
   return text
 }
 
+// Standard Word/Google Docs style nested-list cycles: bullets deepen through
+// •, ◦, ▪; numbers deepen through 1., a., i. — repeating after 3 levels.
+const BULLET_SYMBOLS = ['•', '◦', '▪']
+const NUMBER_TYPES = ['decimal', 'alpha', 'roman']
+
+function toAlpha(n) {
+  return String.fromCharCode(96 + ((n - 1) % 26) + 1)
+}
+function fromAlpha(letter) {
+  return letter.toLowerCase().charCodeAt(0) - 96
+}
+function toRoman(n) {
+  const table = [
+    [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i'],
+  ]
+  let res = ''
+  for (const [val, sym] of table) {
+    while (n >= val) {
+      res += sym
+      n -= val
+    }
+  }
+  return res || 'i'
+}
+function fromRoman(roman) {
+  const values = { i: 1, v: 5, x: 10 }
+  let total = 0
+  const s = roman.toLowerCase()
+  for (let i = 0; i < s.length; i++) {
+    const cur = values[s[i]] || 0
+    const next = values[s[i + 1]] || 0
+    total += cur < next ? -cur : cur
+  }
+  return total || 1
+}
+function renderNumberMarker(type, n) {
+  if (type === 'alpha') return `${toAlpha(n)}.`
+  if (type === 'roman') return `${toRoman(n)}.`
+  return `${n}.`
+}
+
+// Reads the current line's indent level (2 spaces per level) and, if it
+// starts with a bullet or number marker, what kind and value that marker is.
+function parseLineMarker(lineText) {
+  const spaceMatch = lineText.match(/^( *)/)
+  const indent = spaceMatch ? spaceMatch[1].length : 0
+  const level = Math.floor(indent / 2)
+  const rest = lineText.slice(indent)
+
+  const bulletMatch = rest.match(/^([•◦▪])\s/)
+  if (bulletMatch) {
+    return { kind: 'bullet', level, symbol: bulletMatch[1] }
+  }
+  const legacyBulletMatch = rest.match(/^-\s/)
+  if (legacyBulletMatch) {
+    return { kind: 'bullet', level, symbol: '•' }
+  }
+  const numberMatch = rest.match(/^(\d+|[a-z]+|[ivxlcdm]+)\.\s/i)
+  if (numberMatch) {
+    const type = NUMBER_TYPES[level % 3]
+    let value
+    if (type === 'alpha') value = fromAlpha(numberMatch[1])
+    else if (type === 'roman') value = fromRoman(numberMatch[1])
+    else value = parseInt(numberMatch[1], 10) || 1
+    return { kind: 'number', level, type, value }
+  }
+  return null
+}
+
+function buildMarker(kind, level, value) {
+  const indent = '  '.repeat(level)
+  if (kind === 'bullet') {
+    return `${indent}${BULLET_SYMBOLS[level % 3]} `
+  }
+  const type = NUMBER_TYPES[level % 3]
+  return `${indent}${renderNumberMarker(type, value)} `
+}
+
+// Replaces everything from the start of the current line up to the caret
+// with new text — used to swap in a new indent level/marker on Tab.
+function replaceCurrentLinePrefix(fieldEl, newPrefix) {
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return
+  const range = sel.getRangeAt(0)
+
+  let lineStartBr = null
+  let node = range.endContainer
+  if (node.nodeType === Node.TEXT_NODE) {
+    let prev = node.previousSibling
+    while (prev && prev.nodeName !== 'BR') prev = prev.previousSibling
+    lineStartBr = prev
+  }
+
+  const newRange = document.createRange()
+  if (lineStartBr) {
+    newRange.setStartAfter(lineStartBr)
+  } else {
+    newRange.setStart(fieldEl, 0)
+  }
+  newRange.setEnd(range.endContainer, range.endOffset)
+
+  sel.removeAllRanges()
+  sel.addRange(newRange)
+  document.execCommand('insertHTML', false, newPrefix)
+}
+
 function ListBlock({
   list,
   onRename,
@@ -899,16 +1005,32 @@ function RichTextField({ field, cardId, listId, onSave, onDelete, onAddFile, onR
       return
     }
 
+    if (e.key === 'Tab') {
+      const lineText = getCurrentLineTextBeforeCaret(ref.current)
+      const marker = parseLineMarker(lineText)
+      if (!marker) return // let Tab do nothing special on non-list lines
+      e.preventDefault()
+
+      if (e.shiftKey) {
+        const newLevel = Math.max(0, marker.level - 1)
+        const newMarker = buildMarker(marker.kind, newLevel, 1)
+        replaceCurrentLinePrefix(ref.current, newMarker)
+      } else {
+        const newLevel = marker.level + 1
+        const newMarker = buildMarker(marker.kind, newLevel, 1)
+        replaceCurrentLinePrefix(ref.current, newMarker)
+      }
+      return
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       const lineText = getCurrentLineTextBeforeCaret(ref.current)
-      const numberMatch = lineText.match(/^(\d+)\.\s/)
-      if (/^-\s/.test(lineText)) {
+      const marker = parseLineMarker(lineText)
+      if (marker) {
         e.preventDefault()
-        document.execCommand('insertHTML', false, '<br>- ')
-      } else if (numberMatch) {
-        e.preventDefault()
-        const next = parseInt(numberMatch[1], 10) + 1
-        document.execCommand('insertHTML', false, `<br>${next}. `)
+        const nextValue = marker.kind === 'number' ? marker.value + 1 : 1
+        const nextMarker = buildMarker(marker.kind, marker.level, nextValue)
+        document.execCommand('insertHTML', false, `<br>${nextMarker}`)
       }
       // Otherwise let the browser's default Enter (now a plain line break)
       // happen on its own.
@@ -942,8 +1064,7 @@ function RichTextField({ field, cardId, listId, onSave, onDelete, onAddFile, onR
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         onMouseDown={(e) => e.stopPropagation()}
-        data-placeholder="Type here… try '- ' or '1. ' for a list, ⌘B/⌘I to format"
-        className="text-sm text-slate-700 outline-none min-h-[1.4em] whitespace-pre-wrap empty:before:content-[attr(data-placeholder)] empty:before:text-slate-500/50"
+        className="text-sm text-slate-700 outline-none min-h-[1.4em] whitespace-pre-wrap"
       />
 
       {(field.files || []).length > 0 && (
