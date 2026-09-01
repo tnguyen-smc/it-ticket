@@ -61,8 +61,8 @@ export default function HelpForm() {
       style={{ backgroundColor: '#E8F0E9' }}
     >
       <img
-        src={`${import.meta.env.BASE_URL}Holy-Family.png`}
-        alt=""
+        src="/Holy-Family.png"
+        alt="Holy Family"
         className="h-20 sm:h-24 w-auto"
         style={{
           filter:
@@ -92,7 +92,7 @@ export default function HelpForm() {
           <Logo />
           <h1 className="text-2xl font-semibold text-slate-800 mb-2">Ticket Submitted ✅</h1>
           <p className="text-slate-500">
-            The IT team has been notified. Someone will follow up with you shortly.
+            Thanks for submitting! Check request statuses on the left of request screen.
           </p>
           <button
             onClick={() => setStatus('idle')}
