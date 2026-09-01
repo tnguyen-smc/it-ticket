@@ -4,7 +4,7 @@ import TicketCard from './TicketCard'
 import GroupManager from './GroupManager'
 import { hexToRgba } from '../lib/colors'
 import { useMultiSelect } from '../hooks/useMultiSelect'
-import { cleanDragStart } from '../lib/dragHelpers'
+import { setCustomDragPreview } from '../lib/dragHelpers'
 
 export default function ListView({
   tickets,
@@ -138,7 +138,11 @@ export default function ListView({
                       key={ticket.id}
                       draggable
                       onDragStart={(e) => {
-                        cleanDragStart(e)
+                        const isMultiDrag = selected.length > 1 && selected.includes(ticket.id)
+                        setCustomDragPreview(e, {
+                          label: ticket.problem,
+                          count: isMultiDrag ? selected.length : 1,
+                        })
                         e.dataTransfer.setData('ticketId', ticket.id)
                         setDraggingId(ticket.id)
                       }}

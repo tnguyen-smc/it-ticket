@@ -49,6 +49,40 @@ export default function SettingsPanel({ settings, onUpdate, groups, appSettings,
       </div>
 
       <div>
+        <h2 className="text-lg font-semibold text-slate-800 mb-1">Public Quick Status (on /help)</h2>
+        <p className="text-sm text-slate-500 mb-3">
+          Which categories of requests show up in the public queue preview on the
+          submission page. Statuses shown there are still controlled by the Sidebar's
+          "Configure" option.
+        </p>
+        <div className="flex gap-3">
+          {['School', 'Parish'].map((cat) => {
+            const current = appSettings?.publicSummaryCategories || ['School', 'Parish']
+            const checked = current.includes(cat)
+            return (
+              <label
+                key={cat}
+                className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer bg-white border border-slate-200 rounded-lg px-3 py-2"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => {
+                    const next = e.target.checked
+                      ? [...current, cat]
+                      : current.filter((c) => c !== cat)
+                    onUpdateAppSettings({ publicSummaryCategories: next })
+                  }}
+                  className="rounded"
+                />
+                {cat}
+              </label>
+            )
+          })}
+        </div>
+      </div>
+
+      <div>
         <h2 className="text-lg font-semibold text-slate-800 mb-1">Display Settings</h2>
         <p className="text-sm text-slate-500 mb-3">
           Choose which fields show on ticket cards in List and Kanban views, separately for

@@ -2,10 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { PRESET_COLORS, hexToRgba } from '../lib/colors'
 
-const URL_REGEX = /^(https?:\/\/[^\s]+)$/i
-const BULLET_PREFIX = /^-\s+(.*)/
-const NUMBER_PREFIX = /^(\d+)\.\s+(.*)/
-
 export default function BoardView() {
   const [items, setItems] = useState([])
   const [connections, setConnections] = useState([])
@@ -72,6 +68,22 @@ export default function BoardView() {
     return () => el.removeEventListener('wheel', handleWheel)
   }, [])
 
+  // A drag/pan/resize can end with the mouse released outside the tracked
+  // container (or over a child that doesn't bubble the event the same way),
+  // which left dragging "stuck" and caused a flicker on the next interaction.
+  // Listening on window guarantees mouseup is always caught.
+  useEffect(() => {
+    const onWindowMouseMove = (e) => handleCanvasMouseMove(e)
+    const onWindowMouseUp = () => handleCanvasMouseUp()
+    window.addEventListener('mousemove', onWindowMouseMove)
+    window.addEventListener('mouseup', onWindowMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onWindowMouseMove)
+      window.removeEventListener('mouseup', onWindowMouseUp)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom, isPanning, items])
+
   const fetchItems = async () => {
     const { data, error } = await supabase.from('board_items').select('*')
     if (error) {
@@ -97,7 +109,7 @@ export default function BoardView() {
 
     const newCard = {
       title: 'New Note',
-      lists: [{ id: crypto.randomUUID(), title: 'Checklist', items: [], files: [] }],
+      lists: [{ id: crypto.randomUUID(), title: '', fields: [] }],
       color: PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)],
       x: worldX,
       y: worldY,
@@ -545,15 +557,26 @@ function BoardCard({ card, onDragStart, onResizeStart, onUpdate, onDelete, onArc
   const [title, setTitle] = useState(card.title)
   const [showColorPicker, setShowColorPicker] = useState(false)
 
+  // Normalize older cards (checkbox-item model) into the new free-text-field
+  // model so nothing already saved gets lost.
   const lists =
     card.lists && card.lists.length > 0
-      ? card.lists
-      : [{ id: 'default', title: 'Checklist', items: [], files: [] }]
+      ? card.lists.map((l) => ({
+          ...l,
+          fields:
+            l.fields ||
+            (l.items || []).map((it) => ({
+              id: it.id,
+              html: escapeHtml(it.text || ''),
+              files: [],
+            })),
+        }))
+      : [{ id: 'default', title: '', fields: [] }]
 
   const updateLists = (nextLists) => onUpdate({ lists: nextLists })
 
   const addList = () => {
-    updateLists([...lists, { id: crypto.randomUUID(), title: 'New List', items: [], files: [] }])
+    updateLists([...lists, { id: crypto.randomUUID(), title: '', fields: [] }])
   }
 
   const renameList = (listId, title) => {
@@ -564,71 +587,60 @@ function BoardCard({ card, onDragStart, onResizeStart, onUpdate, onDelete, onArc
     updateLists(lists.filter((l) => l.id !== listId))
   }
 
-  const addListItem = (listId, rawText) => {
-    if (!rawText.trim()) return
-    const bulletMatch = rawText.match(BULLET_PREFIX)
-    const numberMatch = rawText.match(NUMBER_PREFIX)
-    let text = rawText
-    let style = null
-    if (bulletMatch) {
-      text = bulletMatch[1]
-      style = 'bullet'
-    } else if (numberMatch) {
-      text = numberMatch[2]
-      style = 'number'
-    }
-
+  const addField = (listId) => {
     updateLists(
       lists.map((l) =>
         l.id === listId
-          ? { ...l, items: [...l.items, { id: crypto.randomUUID(), text, done: false, style }] }
+          ? { ...l, fields: [...(l.fields || []), { id: crypto.randomUUID(), html: '', files: [] }] }
           : l
       )
     )
-    return style
   }
 
-  const toggleItem = (listId, itemId) => {
+  const updateField = (listId, fieldId, html) => {
+    updateLists(
+      lists.map((l) =>
+        l.id === listId
+          ? { ...l, fields: l.fields.map((f) => (f.id === fieldId ? { ...f, html } : f)) }
+          : l
+      )
+    )
+  }
+
+  const deleteField = (listId, fieldId) => {
+    updateLists(
+      lists.map((l) =>
+        l.id === listId ? { ...l, fields: l.fields.filter((f) => f.id !== fieldId) } : l
+      )
+    )
+  }
+
+  const addFieldFile = (listId, fieldId, file) => {
     updateLists(
       lists.map((l) =>
         l.id === listId
           ? {
               ...l,
-              items: l.items
-                .map((it) => (it.id === itemId ? { ...it, done: !it.done } : it))
-                .sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1)),
+              fields: l.fields.map((f) =>
+                f.id === fieldId ? { ...f, files: [...(f.files || []), file] } : f
+              ),
             }
           : l
       )
     )
   }
 
-  // Strikeout is separate from "done": it just crosses out the text visually
-  // without marking it complete or sinking it to the bottom of the list.
-  const toggleStrike = (listId, itemId) => {
+  const removeFieldFile = (listId, fieldId, fileId) => {
     updateLists(
       lists.map((l) =>
         l.id === listId
-          ? { ...l, items: l.items.map((it) => (it.id === itemId ? { ...it, struck: !it.struck } : it)) }
+          ? {
+              ...l,
+              fields: l.fields.map((f) =>
+                f.id === fieldId ? { ...f, files: (f.files || []).filter((x) => x.id !== fileId) } : f
+              ),
+            }
           : l
-      )
-    )
-  }
-
-  const removeItem = (listId, itemId) => {
-    updateLists(
-      lists.map((l) => (l.id === listId ? { ...l, items: l.items.filter((it) => it.id !== itemId) } : l))
-    )
-  }
-
-  const addFile = (listId, file) => {
-    updateLists(lists.map((l) => (l.id === listId ? { ...l, files: [...(l.files || []), file] } : l)))
-  }
-
-  const removeFile = (listId, fileId) => {
-    updateLists(
-      lists.map((l) =>
-        l.id === listId ? { ...l, files: (l.files || []).filter((f) => f.id !== fileId) } : l
       )
     )
   }
@@ -732,12 +744,11 @@ function BoardCard({ card, onDragStart, onResizeStart, onUpdate, onDelete, onArc
             list={list}
             onRename={(title) => renameList(list.id, title)}
             onDeleteList={() => deleteList(list.id)}
-            onAddItem={(text) => addListItem(list.id, text)}
-            onToggleItem={(itemId) => toggleItem(list.id, itemId)}
-            onToggleStrike={(itemId) => toggleStrike(list.id, itemId)}
-            onRemoveItem={(itemId) => removeItem(list.id, itemId)}
-            onAddFile={(file) => addFile(list.id, file)}
-            onRemoveFile={(fileId) => removeFile(list.id, fileId)}
+            onAddField={() => addField(list.id)}
+            onUpdateField={(fieldId, html) => updateField(list.id, fieldId, html)}
+            onDeleteField={(fieldId) => deleteField(list.id, fieldId)}
+            onAddFieldFile={(fieldId, file) => addFieldFile(list.id, fieldId, file)}
+            onRemoveFieldFile={(fieldId, fileId) => removeFieldFile(list.id, fieldId, fileId)}
             showDeleteList={lists.length > 1}
             cardId={card.id}
           />
@@ -769,34 +780,138 @@ function BoardCard({ card, onDragStart, onResizeStart, onUpdate, onDelete, onArc
   )
 }
 
+function escapeHtml(str = '') {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// Finds the text of the current line up to the caret, so we can detect
+// "- " or "1. " at the start of a line and auto-continue it on Enter — like
+// native Notes/Word list auto-formatting.
+function getCurrentLineTextBeforeCaret(fieldEl) {
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return ''
+  const node = sel.anchorNode
+  const offset = sel.anchorOffset
+  if (!node || node.nodeType !== Node.TEXT_NODE) return ''
+
+  let text = node.textContent.slice(0, offset)
+  let prev = node.previousSibling
+  while (prev && prev.nodeName !== 'BR') {
+    text = (prev.textContent || '') + text
+    prev = prev.previousSibling
+  }
+  return text
+}
+
 function ListBlock({
   list,
   onRename,
   onDeleteList,
-  onAddItem,
-  onToggleItem,
-  onToggleStrike,
-  onRemoveItem,
-  onAddFile,
-  onRemoveFile,
+  onAddField,
+  onUpdateField,
+  onDeleteField,
+  onAddFieldFile,
+  onRemoveFieldFile,
   showDeleteList,
   cardId,
 }) {
   const [titleDraft, setTitleDraft] = useState(list.title)
-  const [newItemText, setNewItemText] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const fileInputRef = useRef(null)
 
-  const submitItem = () => {
-    if (!newItemText.trim()) return
-    const style = onAddItem(newItemText)
-    if (style === 'bullet') {
-      setNewItemText('- ')
-    } else if (style === 'number') {
-      const nextNum = (list.items.filter((i) => i.style === 'number').length || 0) + 2
-      setNewItemText(`${nextNum}. `)
-    } else {
-      setNewItemText('')
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <input
+          value={titleDraft}
+          onChange={(e) => setTitleDraft(e.target.value)}
+          onBlur={() => onRename(titleDraft)}
+          onMouseDown={(e) => e.stopPropagation()}
+          placeholder="Untitled list"
+          className="bg-transparent text-xs font-semibold text-slate-700 outline-none w-full placeholder:text-slate-500/50"
+        />
+        {showDeleteList && (
+          <button
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={onDeleteList}
+            className="text-slate-400 hover:text-red-500 text-xs flex-shrink-0"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        {(list.fields || []).map((field) => (
+          <RichTextField
+            key={field.id}
+            field={field}
+            cardId={cardId}
+            listId={list.id}
+            onSave={(html) => onUpdateField(field.id, html)}
+            onDelete={() => onDeleteField(field.id)}
+            onAddFile={(file) => onAddFieldFile(field.id, file)}
+            onRemoveFile={(fileId) => onRemoveFieldFile(field.id, fileId)}
+          />
+        ))}
+
+        <button
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={onAddField}
+          className="text-xs text-slate-500 hover:text-slate-700"
+        >
+          + Add text field
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function RichTextField({ field, cardId, listId, onSave, onDelete, onAddFile, onRemoveFile }) {
+  const ref = useRef(null)
+  const fileInputRef = useRef(null)
+  const [uploading, setUploading] = useState(false)
+
+  // Uncontrolled contentEditable: only push `html` into the DOM when it
+  // actually differs from what's there, so we don't clobber the cursor
+  // position while the person is actively typing.
+  useEffect(() => {
+    if (ref.current && ref.current.innerHTML !== (field.html || '')) {
+      ref.current.innerHTML = field.html || ''
+    }
+  }, [field.html])
+
+  const handleFocus = () => {
+    // Makes Enter insert a plain <br> line break instead of a new <div>
+    // "paragraph", which otherwise looks double-spaced — closer to a notepad.
+    document.execCommand('defaultParagraphSeparator', false, 'br')
+  }
+
+  const handleBlur = () => {
+    if (ref.current) onSave(ref.current.innerHTML)
+  }
+
+  const handleKeyDown = (e) => {
+    // Cmd/Ctrl+Shift+X toggles strikethrough — Bold (Cmd/Ctrl+B) and Italic
+    // (Cmd/Ctrl+I) already work natively inside contentEditable in every
+    // major browser, so no extra handling is needed for those.
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'x') {
+      e.preventDefault()
+      document.execCommand('strikeThrough')
+      return
+    }
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      const lineText = getCurrentLineTextBeforeCaret(ref.current)
+      const numberMatch = lineText.match(/^(\d+)\.\s/)
+      if (/^-\s/.test(lineText)) {
+        e.preventDefault()
+        document.execCommand('insertHTML', false, '<br>- ')
+      } else if (numberMatch) {
+        e.preventDefault()
+        const next = parseInt(numberMatch[1], 10) + 1
+        document.execCommand('insertHTML', false, `<br>${next}. `)
+      }
+      // Otherwise let the browser's default Enter (now a plain line break)
+      // happen on its own.
     }
   }
 
@@ -804,7 +919,7 @@ function ListBlock({
     const file = e.target.files?.[0]
     if (!file) return
     setUploading(true)
-    const path = `${cardId}/${list.id}/${Date.now()}-${file.name}`
+    const path = `${cardId}/${listId}/${field.id}/${Date.now()}-${file.name}`
     const { error } = await supabase.storage.from('board-files').upload(path, file)
     if (error) {
       console.error('File upload failed:', error)
@@ -817,60 +932,23 @@ function ListBlock({
     e.target.value = ''
   }
 
-  let numberCounter = 0
-
   return (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <input
-          value={titleDraft}
-          onChange={(e) => setTitleDraft(e.target.value)}
-          onBlur={() => onRename(titleDraft)}
-          onMouseDown={(e) => e.stopPropagation()}
-          className="bg-transparent text-xs font-semibold text-slate-700 outline-none w-full"
-        />
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            onChange={handleFileSelect}
-            onMouseDown={(e) => e.stopPropagation()}
-          />
-          <button
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={() => fileInputRef.current?.click()}
-            className="text-slate-500 hover:text-slate-800"
-            title="Attach a file"
-          >
-            {uploading ? (
-              <span className="text-[10px]">…</span>
-            ) : (
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                />
-              </svg>
-            )}
-          </button>
-          {showDeleteList && (
-            <button
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={onDeleteList}
-              className="text-slate-400 hover:text-red-500 text-xs"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-      </div>
+    <div className="bg-white/40 rounded-lg p-2 group/field">
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        onMouseDown={(e) => e.stopPropagation()}
+        data-placeholder="Type here… try '- ' or '1. ' for a list, ⌘B/⌘I to format"
+        className="text-sm text-slate-700 outline-none min-h-[1.4em] whitespace-pre-wrap empty:before:content-[attr(data-placeholder)] empty:before:text-slate-500/50"
+      />
 
-      {(list.files || []).length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-1.5">
-          {list.files.map((f) => (
+      {(field.files || []).length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {field.files.map((f) => (
             <a
               key={f.id}
               href={f.url}
@@ -895,68 +973,41 @@ function ListBlock({
         </div>
       )}
 
-      <div className="space-y-1">
-        {list.items.map((it) => {
-          if (it.style === 'number' && !it.done) numberCounter += 1
-          const struckOrDone = it.done || it.struck
-          return (
-            <div key={it.id} className="flex items-center gap-2 group">
-              <input
-                type="checkbox"
-                checked={it.done}
-                onChange={() => onToggleItem(it.id)}
-                onMouseDown={(e) => e.stopPropagation()}
+      <div className="flex items-center gap-2 mt-1 opacity-0 group-hover/field:opacity-100 transition-opacity">
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={handleFileSelect}
+          onMouseDown={(e) => e.stopPropagation()}
+        />
+        <button
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => fileInputRef.current?.click()}
+          className="text-slate-500 hover:text-slate-800"
+          title="Attach a file or link"
+        >
+          {uploading ? (
+            <span className="text-[10px]">…</span>
+          ) : (
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
               />
-              <span className="text-sm flex-1 flex items-baseline gap-1">
-                {it.style === 'bullet' && !it.done && <span className="text-slate-400">•</span>}
-                {it.style === 'number' && !it.done && (
-                  <span className="text-slate-400">{numberCounter}.</span>
-                )}
-                {URL_REGEX.test(it.text) ? (
-                  <a
-                    href={it.text}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    className={`underline ${struckOrDone ? 'line-through text-slate-400' : 'text-blue-600'}`}
-                  >
-                    {it.text}
-                  </a>
-                ) : (
-                  <span className={struckOrDone ? 'line-through text-slate-500' : 'text-slate-700'}>
-                    {it.text}
-                  </span>
-                )}
-              </span>
-              <button
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => onToggleStrike(it.id)}
-                title="Strike through"
-                className={`text-xs px-1 opacity-0 group-hover:opacity-100 ${
-                  it.struck ? 'text-slate-600 opacity-100' : 'text-slate-400 hover:text-slate-600'
-                }`}
-              >
-                <s>S</s>
-              </button>
-              <button
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => onRemoveItem(it.id)}
-                className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 text-xs"
-              >
-                ✕
-              </button>
-            </div>
-          )
-        })}
-
-        <div className="pt-1" onMouseDown={(e) => e.stopPropagation()}>
-          <input
-            value={newItemText}
-            onChange={(e) => setNewItemText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && submitItem()}
-            className="w-full bg-transparent border-b border-white/40 focus:border-slate-400 px-0.5 py-1 text-xs outline-none"
-          />
-        </div>
+            </svg>
+          )}
+        </button>
+        <button
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={onDelete}
+          className="text-slate-400 hover:text-red-500 text-xs"
+          title="Delete this text field"
+        >
+          ✕
+        </button>
       </div>
     </div>
   )

@@ -12,8 +12,6 @@ export default function HelpForm() {
     setStatus('sending')
     const timestamp = new Date().toISOString()
 
-    // Look up the admin-configured default intake group; fall back to "New"
-    // if nothing's been set (e.g. brand new install, migration not yet run).
     let intakeStatus = 'New'
     const { data: settingsRow } = await supabase
       .from('app_settings')
@@ -50,8 +48,6 @@ export default function HelpForm() {
         import.meta.env.VITE_EMAILJS_PUBLIC_KEY
       )
     } catch (err) {
-      // Ticket is already saved in the database even if the email fails,
-      // so we don't block the user on this — just log it.
       console.warn('Ticket saved, but email notification failed:', err)
     }
 
@@ -59,49 +55,67 @@ export default function HelpForm() {
     setProblem('')
   }
 
+  const PageShell = ({ children }) => (
+    <div
+      className="min-h-[100dvh] flex items-center justify-center gap-6 px-4 py-8 flex-wrap"
+      style={{ backgroundColor: '#E8F0E9' }}
+    >
+      {children}
+    </div>
+  )
+
+  const Logo = () => (
+    <img
+      src={`${import.meta.env.BASE_URL}School-logo.png`}
+      alt=""
+      className="h-14 w-auto mx-auto mb-3"
+      style={{ filter: 'brightness(0) saturate(100%)' }}
+    />
+  )
+
   if (status === 'done') {
     return (
-      <div className="min-h-screen flex items-center justify-center gap-6 bg-slate-50 px-4 py-8 flex-wrap">
-        <PublicStatusSummary />
-        <div className="bg-white shadow-md rounded-2xl p-8 max-w-md text-center">
+      <PageShell>
+        <div className="order-2 sm:order-1">
+          <PublicStatusSummary />
+        </div>
+        <div className="order-1 sm:order-2 bg-white shadow-md rounded-2xl p-6 sm:p-8 max-w-md w-full text-center">
+          <Logo />
           <h1 className="text-2xl font-semibold text-slate-800 mb-2">Ticket Submitted ✅</h1>
           <p className="text-slate-500">
             The IT team has been notified. Someone will follow up with you shortly.
           </p>
           <button
             onClick={() => setStatus('idle')}
-            className="mt-6 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="mt-6 px-4 py-2 text-white rounded-lg font-medium"
+            style={{ backgroundColor: '#5C8768' }}
           >
             Submit Another
           </button>
         </div>
-      </div>
+      </PageShell>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center gap-6 bg-slate-50 px-4 py-8 flex-wrap">
-      <PublicStatusSummary />
+    <PageShell>
+      <div className="order-2 sm:order-1">
+        <PublicStatusSummary />
+      </div>
+
       <form
         onSubmit={handleSubmit}
-        className="bg-white shadow-md rounded-2xl p-8 w-full max-w-md space-y-5"
+        className="order-1 sm:order-2 bg-white shadow-md rounded-2xl p-6 sm:p-8 w-full max-w-md space-y-5"
       >
-        <div className="flex items-center gap-4">
-          <img
-            src={`${import.meta.env.BASE_URL}School-logo.png`}
-            alt=""
-            className="h-14 w-auto flex-shrink-0"
-            style={{ filter: 'brightness(0) saturate(100%)' }}
-          />
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
-              St. Mary Catholic School
-            </p>
-            <h1 className="text-2xl font-semibold text-slate-800">IT Request</h1>
-            <p className="text-slate-500 text-sm mt-1">
-              Submit ticket for St. Mary Catholic School
-            </p>
-          </div>
+        <div className="text-center">
+          <Logo />
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
+            St. Mary Catholic School
+          </p>
+          <h1 className="text-2xl font-semibold text-slate-800">IT Request</h1>
+          <p className="text-slate-500 text-sm mt-1">
+            Submit ticket for St. Mary Catholic School
+          </p>
         </div>
 
         <div>
@@ -113,7 +127,8 @@ export default function HelpForm() {
             rows={7}
             value={problem}
             onChange={(e) => setProblem(e.target.value)}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-base focus:ring-2 focus:outline-none resize-none"
+            style={{ '--tw-ring-color': '#5C8768' }}
             placeholder="Describe what's happening..."
           />
         </div>
@@ -121,7 +136,8 @@ export default function HelpForm() {
         <button
           type="submit"
           disabled={status === 'sending'}
-          className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
+          className="w-full text-white py-3 sm:py-2.5 rounded-lg font-medium disabled:opacity-50 transition-colors"
+          style={{ backgroundColor: '#5C8768' }}
         >
           {status === 'sending' ? 'Submitting...' : 'Submit'}
         </button>
@@ -132,6 +148,6 @@ export default function HelpForm() {
           </p>
         )}
       </form>
-    </div>
+    </PageShell>
   )
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 
-const DEFAULTS = { defaultIntakeGroup: 'New', sortMode: 'date' }
+const DEFAULTS = { defaultIntakeGroup: 'New', sortMode: 'date', publicSummaryCategories: ['School', 'Parish'] }
 
 export function useAppSettings() {
   const [settings, setSettings] = useState(DEFAULTS)

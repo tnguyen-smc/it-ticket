@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { hexToRgba } from '../lib/colors'
+import { useAppSettings } from '../hooks/useAppSettings'
 
 // Read-only mirror of the admin "Quick Status" panel. Which statuses appear here
 // is controlled entirely by admins (ticket_groups.show_in_summary) — the public
@@ -9,6 +10,7 @@ import { hexToRgba } from '../lib/colors'
 export default function PublicStatusSummary() {
   const [groups, setGroups] = useState([])
   const [tickets, setTickets] = useState([])
+  const { settings: appSettings } = useAppSettings()
 
   useEffect(() => {
     fetchData()
@@ -37,21 +39,24 @@ export default function PublicStatusSummary() {
     setGroups(groupData || [])
 
     // Only select the fields we intend to show publicly — notes is deliberately excluded
-    const { data: ticketData } = await supabase.from('tickets').select('id, status, problem')
+    const { data: ticketData } = await supabase.from('tickets').select('id, status, problem, category')
     setTickets(ticketData || [])
   }
 
+  const allowedCategories = appSettings?.publicSummaryCategories || ['School', 'Parish']
   const visibleGroups = groups.filter((g) => g.show_in_summary)
+  const scopedTickets = tickets.filter((t) => allowedCategories.includes(t.category || 'School'))
+
   if (visibleGroups.length === 0) return null
 
   return (
-    <div className="bg-white shadow-md rounded-2xl p-6 w-full max-w-xs">
+    <div className="bg-white shadow-md rounded-2xl p-6 w-full max-w-md sm:max-w-xs">
       <h2 className="text-sm font-semibold text-slate-700 mb-1">Current Queue</h2>
       <p className="text-xs text-slate-400 mb-4">A quick look at what's in progress.</p>
 
       <div className="space-y-4">
         {visibleGroups.map((group) => {
-          const groupTickets = tickets.filter((t) => t.status === group.name)
+          const groupTickets = scopedTickets.filter((t) => t.status === group.name)
           return (
             <div key={group.id}>
               <div

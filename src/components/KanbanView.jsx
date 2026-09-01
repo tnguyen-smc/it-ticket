@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import TicketCard from './TicketCard'
 import { hexToRgba } from '../lib/colors'
 import { useMultiSelect } from '../hooks/useMultiSelect'
-import { cleanDragStart } from '../lib/dragHelpers'
+import { setCustomDragPreview } from '../lib/dragHelpers'
 import { supabase } from '../supabaseClient'
 
 export default function KanbanView({
@@ -174,7 +174,11 @@ export default function KanbanView({
                             draggable
                             onDragStart={(e) => {
                               e.stopPropagation()
-                              cleanDragStart(e)
+                              const isMultiDrag = selected.length > 1 && selected.includes(ticket.id)
+                              setCustomDragPreview(e, {
+                                label: ticket.problem,
+                                count: isMultiDrag ? selected.length : 1,
+                              })
                               e.dataTransfer.setData('ticketId', ticket.id)
                               setDraggingId(ticket.id)
                             }}

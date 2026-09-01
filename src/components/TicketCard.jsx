@@ -4,6 +4,14 @@ import ColorStatusSelect from './ColorStatusSelect'
 
 const DEFAULT_FIELDS = { name: true, email: true, problem: true, date: true, notes: true, status: true }
 
+function toDateInputValue(isoString) {
+  const d = new Date(isoString)
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
 export default function TicketCard({
   ticket,
   groups,
@@ -24,6 +32,7 @@ export default function TicketCard({
   const [editing, setEditing] = useState(false)
   const [nameDraft, setNameDraft] = useState(ticket.name || '')
   const [problemDraft, setProblemDraft] = useState(ticket.problem || '')
+  const [dateDraft, setDateDraft] = useState(toDateInputValue(ticket.created_at))
   const cardRef = useRef(null)
 
   const saveNotes = () => {
@@ -48,13 +57,20 @@ export default function TicketCard({
   }, [notesOpen, notesDraft])
 
   const saveEdit = () => {
-    onFieldsChange(ticket.id, { name: nameDraft, problem: problemDraft })
+    // Keep local noon to avoid timezone rollover shifting the date by a day
+    const newDate = new Date(`${dateDraft}T12:00:00`)
+    onFieldsChange(ticket.id, {
+      name: nameDraft,
+      problem: problemDraft,
+      created_at: newDate.toISOString(),
+    })
     setEditing(false)
   }
 
   const cancelEdit = () => {
     setNameDraft(ticket.name || '')
     setProblemDraft(ticket.problem || '')
+    setDateDraft(toDateInputValue(ticket.created_at))
     setEditing(false)
   }
 
@@ -141,6 +157,14 @@ export default function TicketCard({
             rows={3}
             className="w-full text-sm border border-slate-200 rounded-md px-2 py-1 resize-none"
           />
+          {visibleFields.date && (
+            <input
+              type="date"
+              value={dateDraft}
+              onChange={(e) => setDateDraft(e.target.value)}
+              className="text-sm border border-slate-200 rounded-md px-2 py-1"
+            />
+          )}
           <div className="flex justify-end gap-2">
             <button onClick={cancelEdit} className="text-xs text-slate-500 px-2 py-1">
               Cancel
@@ -166,7 +190,7 @@ export default function TicketCard({
 
       {visibleFields.date && (
         <div className="text-xs text-slate-400 mb-2">
-          <span>{new Date(ticket.created_at).toLocaleString()}</span>
+          <span>{new Date(ticket.created_at).toLocaleDateString()}</span>
         </div>
       )}
 
@@ -211,17 +235,30 @@ export default function TicketCard({
           </button>
 
           {notesOpen ? (
-            <textarea
-              autoFocus
-              value={notesDraft}
-              onChange={(e) => setNotesDraft(e.target.value)}
-              placeholder="Internal note (not visible to the requester)..."
-              rows={3}
-              className="w-full mt-1.5 text-xs bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-amber-300"
-            />
+            <div className="mt-1.5">
+              <textarea
+                autoFocus
+                value={notesDraft}
+                onChange={(e) => setNotesDraft(e.target.value)}
+                placeholder="Internal note (not visible to the requester)..."
+                rows={3}
+                className="w-full text-xs bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-amber-300"
+              />
+              <div className="flex justify-end mt-1">
+                <button
+                  onClick={() => {
+                    saveNotes()
+                    setNotesOpen(false)
+                  }}
+                  className="text-xs bg-slate-800 text-white rounded px-3 py-1"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
           ) : (
             ticket.notes && (
-              <p className="text-xs text-slate-400 italic whitespace-pre-wrap mt-1">{ticket.notes}</p>
+              <p className="text-sm text-slate-600 whitespace-pre-wrap mt-1">{ticket.notes}</p>
             )
           )}
         </div>
