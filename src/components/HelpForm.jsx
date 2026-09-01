@@ -61,8 +61,8 @@ export default function HelpForm() {
       style={{ backgroundColor: '#E8F0E9' }}
     >
       <img
-        src="/Holy-Family.png"
-        alt="Holy Family"
+        src={`${import.meta.env.BASE_URL}Holy-Family.png`}
+        alt=""
         className="h-20 sm:h-24 w-auto"
         style={{
           filter:
