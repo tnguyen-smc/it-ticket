@@ -784,23 +784,70 @@ function escapeHtml(str = '') {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-// Finds the text of the current line up to the caret, so we can detect
-// "- " or "1. " at the start of a line and auto-continue it on Enter — like
-// native Notes/Word list auto-formatting.
-function getCurrentLineTextBeforeCaret(fieldEl) {
+// Finds the full current "line" (the text between the nearest preceding and
+// following <br>, or the field's edges) using a flat walk over text/BR nodes.
+// This is more robust than only looking at text immediately before the caret,
+// which could misfire once a line contains more than one text node (e.g.
+// right after we've auto-inserted a marker).
+function getLineInfo(fieldEl) {
   const sel = window.getSelection()
-  if (!sel || sel.rangeCount === 0) return ''
-  const node = sel.anchorNode
-  const offset = sel.anchorOffset
-  if (!node || node.nodeType !== Node.TEXT_NODE) return ''
+  if (!sel || sel.rangeCount === 0) return null
+  const caretNode = sel.getRangeAt(0).endContainer
 
-  let text = node.textContent.slice(0, offset)
-  let prev = node.previousSibling
-  while (prev && prev.nodeName !== 'BR') {
-    text = (prev.textContent || '') + text
-    prev = prev.previousSibling
+  const walker = document.createTreeWalker(fieldEl, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+    acceptNode: (n) =>
+      n.nodeType === Node.TEXT_NODE || n.nodeName === 'BR'
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_SKIP,
+  })
+  const nodes = []
+  let n
+  while ((n = walker.nextNode())) nodes.push(n)
+
+  let caretIdx = nodes.indexOf(caretNode)
+  if (caretIdx === -1) {
+    // Caret is directly inside the field (e.g. an empty field) rather than
+    // in a specific text node picked up by the walker.
+    if (caretNode === fieldEl) {
+      return { fullLineText: '', lineStartBr: null, lineEndBr: null }
+    }
+    return null
   }
-  return text
+
+  let startIdx = caretIdx
+  while (startIdx > 0 && nodes[startIdx - 1].nodeName !== 'BR') startIdx--
+  let endIdx = caretIdx
+  while (endIdx < nodes.length - 1 && nodes[endIdx + 1].nodeName !== 'BR') endIdx++
+
+  const lineTextNodes = nodes.slice(startIdx, endIdx + 1).filter((nd) => nd.nodeType === Node.TEXT_NODE)
+  const fullLineText = lineTextNodes.map((nd) => nd.textContent).join('')
+  const lineStartBr = startIdx > 0 ? nodes[startIdx - 1] : null
+  const lineEndBr = endIdx < nodes.length - 1 ? nodes[endIdx + 1] : null
+
+  return { fullLineText, lineStartBr, lineEndBr }
+}
+
+// Replaces the ENTIRE current line (start to end, regardless of where the
+// caret sits within it) with new text. Used for Tab/Shift+Tab re-indenting,
+// so any content already typed after the marker is preserved rather than
+// accidentally deleted.
+function replaceLine(fieldEl, lineInfo, newLineText) {
+  const range = document.createRange()
+  if (lineInfo.lineStartBr) {
+    range.setStartAfter(lineInfo.lineStartBr)
+  } else {
+    range.setStart(fieldEl, 0)
+  }
+  if (lineInfo.lineEndBr) {
+    range.setEndBefore(lineInfo.lineEndBr)
+  } else {
+    range.setEnd(fieldEl, fieldEl.childNodes.length)
+  }
+
+  const sel = window.getSelection()
+  sel.removeAllRanges()
+  sel.addRange(range)
+  document.execCommand('insertHTML', false, escapeHtml(newLineText))
 }
 
 // Standard Word/Google Docs style nested-list cycles: bullets deepen through
@@ -844,30 +891,32 @@ function renderNumberMarker(type, n) {
   return `${n}.`
 }
 
-// Reads the current line's indent level (2 spaces per level) and, if it
-// starts with a bullet or number marker, what kind and value that marker is.
+// Reads a line's indent level (2 spaces per level) and, if it starts with a
+// bullet or number marker, what kind/value that marker is, plus exactly how
+// many characters the marker itself takes up (so callers can split off
+// whatever text follows it on the same line).
 function parseLineMarker(lineText) {
   const spaceMatch = lineText.match(/^( *)/)
   const indent = spaceMatch ? spaceMatch[1].length : 0
   const level = Math.floor(indent / 2)
   const rest = lineText.slice(indent)
 
-  const bulletMatch = rest.match(/^([•◦▪])\s/)
+  const bulletMatch = rest.match(/^([•◦▪])(\s)/)
   if (bulletMatch) {
-    return { kind: 'bullet', level, symbol: bulletMatch[1] }
+    return { kind: 'bullet', level, prefixLength: indent + bulletMatch[0].length }
   }
-  const legacyBulletMatch = rest.match(/^-\s/)
+  const legacyBulletMatch = rest.match(/^-(\s)/)
   if (legacyBulletMatch) {
-    return { kind: 'bullet', level, symbol: '•' }
+    return { kind: 'bullet', level, prefixLength: indent + legacyBulletMatch[0].length }
   }
-  const numberMatch = rest.match(/^(\d+|[a-z]+|[ivxlcdm]+)\.\s/i)
+  const numberMatch = rest.match(/^(\d+|[a-z]+|[ivxlcdm]+)\.(\s)/i)
   if (numberMatch) {
     const type = NUMBER_TYPES[level % 3]
     let value
     if (type === 'alpha') value = fromAlpha(numberMatch[1])
     else if (type === 'roman') value = fromRoman(numberMatch[1])
     else value = parseInt(numberMatch[1], 10) || 1
-    return { kind: 'number', level, type, value }
+    return { kind: 'number', level, type, value, prefixLength: indent + numberMatch[0].length }
   }
   return null
 }
@@ -879,34 +928,6 @@ function buildMarker(kind, level, value) {
   }
   const type = NUMBER_TYPES[level % 3]
   return `${indent}${renderNumberMarker(type, value)} `
-}
-
-// Replaces everything from the start of the current line up to the caret
-// with new text — used to swap in a new indent level/marker on Tab.
-function replaceCurrentLinePrefix(fieldEl, newPrefix) {
-  const sel = window.getSelection()
-  if (!sel || sel.rangeCount === 0) return
-  const range = sel.getRangeAt(0)
-
-  let lineStartBr = null
-  let node = range.endContainer
-  if (node.nodeType === Node.TEXT_NODE) {
-    let prev = node.previousSibling
-    while (prev && prev.nodeName !== 'BR') prev = prev.previousSibling
-    lineStartBr = prev
-  }
-
-  const newRange = document.createRange()
-  if (lineStartBr) {
-    newRange.setStartAfter(lineStartBr)
-  } else {
-    newRange.setStart(fieldEl, 0)
-  }
-  newRange.setEnd(range.endContainer, range.endOffset)
-
-  sel.removeAllRanges()
-  sel.addRange(newRange)
-  document.execCommand('insertHTML', false, newPrefix)
 }
 
 function ListBlock({
@@ -1005,27 +1026,46 @@ function RichTextField({ field, cardId, listId, onSave, onDelete, onAddFile, onR
       return
     }
 
-    if (e.key === 'Tab') {
-      const lineText = getCurrentLineTextBeforeCaret(ref.current)
-      const marker = parseLineMarker(lineText)
-      if (!marker) return // let Tab do nothing special on non-list lines
-      e.preventDefault()
-
-      if (e.shiftKey) {
-        const newLevel = Math.max(0, marker.level - 1)
-        const newMarker = buildMarker(marker.kind, newLevel, 1)
-        replaceCurrentLinePrefix(ref.current, newMarker)
-      } else {
-        const newLevel = marker.level + 1
-        const newMarker = buildMarker(marker.kind, newLevel, 1)
-        replaceCurrentLinePrefix(ref.current, newMarker)
+    if (e.key === ' ') {
+      // Convert a raw "-" or "1." into a real marker as soon as the trailing
+      // space is typed — so formatting shows up immediately on the very
+      // first line, not only after pressing Enter.
+      const info = getLineInfo(ref.current)
+      if (!info) return
+      const spaceMatch = info.fullLineText.match(/^( *)/)
+      const indent = spaceMatch ? spaceMatch[1].length : 0
+      const rest = info.fullLineText.slice(indent)
+      const isDash = rest === '-'
+      const numMatch = rest.match(/^(\d+)\.$/)
+      if (isDash || numMatch) {
+        e.preventDefault()
+        const level = Math.floor(indent / 2)
+        const kind = isDash ? 'bullet' : 'number'
+        const value = numMatch ? parseInt(numMatch[1], 10) : 1
+        replaceLine(ref.current, info, buildMarker(kind, level, value))
       }
       return
     }
 
+    if (e.key === 'Tab') {
+      const info = getLineInfo(ref.current)
+      if (!info) return
+      const marker = parseLineMarker(info.fullLineText)
+      if (!marker) return // let Tab do nothing special on non-list lines
+      e.preventDefault()
+
+      // Preserve whatever text already follows the marker on this line —
+      // only the marker itself changes, nothing typed gets lost.
+      const remainder = info.fullLineText.slice(marker.prefixLength)
+      const newLevel = e.shiftKey ? Math.max(0, marker.level - 1) : marker.level + 1
+      const newMarker = buildMarker(marker.kind, newLevel, 1)
+      replaceLine(ref.current, info, newMarker + remainder)
+      return
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
-      const lineText = getCurrentLineTextBeforeCaret(ref.current)
-      const marker = parseLineMarker(lineText)
+      const info = getLineInfo(ref.current)
+      const marker = info && parseLineMarker(info.fullLineText)
       if (marker) {
         e.preventDefault()
         const nextValue = marker.kind === 'number' ? marker.value + 1 : 1

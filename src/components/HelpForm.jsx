@@ -57,10 +57,19 @@ export default function HelpForm() {
 
   const PageShell = ({ children }) => (
     <div
-      className="min-h-[100dvh] flex items-center justify-center gap-6 px-4 py-8 flex-wrap"
+      className="min-h-[100dvh] flex flex-col items-center justify-center gap-5 px-4 py-8"
       style={{ backgroundColor: '#E8F0E9' }}
     >
-      {children}
+      <img
+        src={`${import.meta.env.BASE_URL}Holy-Family.png`}
+        alt=""
+        className="h-20 sm:h-24 w-auto"
+        style={{
+          filter:
+            'drop-shadow(0 0 10px rgba(250,204,21,0.45)) drop-shadow(0 0 22px rgba(250,204,21,0.25))',
+        }}
+      />
+      <div className="flex items-center justify-center gap-6 flex-wrap w-full">{children}</div>
     </div>
   )
 
