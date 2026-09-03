@@ -1,6 +1,10 @@
 import { ALL_FIELDS } from '../hooks/useDisplaySettings'
 
 export default function SettingsPanel({ settings, onUpdate, groups, appSettings, onUpdateAppSettings }) {
+  const configuredGroup = appSettings?.defaultIntakeGroup
+  const groupStillExists = groups.some((g) => g.name === configuredGroup)
+  const isStale = !!configuredGroup && !groupStillExists && groups.length > 0
+
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       <div>
@@ -9,11 +13,24 @@ export default function SettingsPanel({ settings, onUpdate, groups, appSettings,
           Which group a request lands in automatically when someone submits it from the
           public /help form.
         </p>
+
+        {isStale && (
+          <div className="mb-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-amber-800">
+            ⚠️ This is set to <strong>"{configuredGroup}"</strong>, which no longer exists as a
+            group (it may have been renamed or deleted). New submissions are currently falling
+            back to your first group automatically, but pick a real group below to fix this
+            properly.
+          </div>
+        )}
+
         <select
-          value={appSettings?.defaultIntakeGroup || 'New'}
+          value={configuredGroup || 'New'}
           onChange={(e) => onUpdateAppSettings({ defaultIntakeGroup: e.target.value })}
-          className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
+          className={`border rounded-lg px-3 py-2 text-sm bg-white ${
+            isStale ? 'border-amber-400' : 'border-slate-300'
+          }`}
         >
+          {isStale && <option value={configuredGroup}>{configuredGroup} (missing)</option>}
           {groups.map((g) => (
             <option key={g.id} value={g.name}>
               {g.name}

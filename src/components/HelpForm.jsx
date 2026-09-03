@@ -48,14 +48,23 @@ export default function HelpForm() {
     setStatus('sending')
     const timestamp = new Date().toISOString()
 
+    // Look up the admin-configured default intake group, but validate it
+    // against the groups that actually exist right now — if the group was
+    // renamed or deleted since it was configured, silently falling back to
+    // a stale name would make submissions vanish (matched against no
+    // column). Fall back to the first real group instead.
+    const [{ data: settingsRow }, { data: groupsData }] = await Promise.all([
+      supabase.from('app_settings').select('value').eq('key', 'global').single(),
+      supabase.from('ticket_groups').select('name').order('sort_order', { ascending: true }),
+    ])
+
+    const groupNames = (groupsData || []).map((g) => g.name)
+    const configuredGroup = settingsRow?.value?.defaultIntakeGroup
     let intakeStatus = 'New'
-    const { data: settingsRow } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'global')
-      .single()
-    if (settingsRow?.value?.defaultIntakeGroup) {
-      intakeStatus = settingsRow.value.defaultIntakeGroup
+    if (configuredGroup && groupNames.includes(configuredGroup)) {
+      intakeStatus = configuredGroup
+    } else if (groupNames.length > 0) {
+      intakeStatus = groupNames[0]
     }
 
     const { error } = await supabase.from('tickets').insert({
@@ -99,9 +108,9 @@ export default function HelpForm() {
         </div>
         <div className="order-1 sm:order-2 bg-white shadow-md rounded-2xl p-6 sm:p-8 max-w-md w-full text-center">
           <Logo />
-          <h1 className="text-2xl font-semibold text-slate-800 mb-2">Ticket Submitted ✅</h1>
+          <h1 className="text-2xl font-semibold text-slate-800 mb-2">Ticket Submitted!</h1>
           <p className="text-slate-500">
-            Thanks for submitting! Check request statuses on the left of request screen.
+            Thanks for submitting! All requests and statuses are pn the left.
           </p>
           <button
             onClick={() => setStatus('idle')}
