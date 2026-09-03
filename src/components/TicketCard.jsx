@@ -101,16 +101,14 @@ export default function TicketCard({
           : 'border border-slate-200 hover:border-slate-300'
       }`}
     >
-      {/* Top row: title (if it's the first field) on the left, compact category + status on the right */}
+      {/* Top row: title (whichever field is first, per Settings) on the left, compact category + status on the right */}
       <div className="flex items-start justify-between gap-2 mb-1">
-        {!editing && firstVisibleKey === 'name' && visibleFields.name && (
-          <p className="font-semibold text-slate-800 text-sm">{ticket.name || 'Anonymous request'}</p>
-        )}
-        {!editing && firstVisibleKey === 'problem' && visibleFields.problem && (
-          <p className="font-semibold text-slate-800 text-sm break-words min-w-0">{ticket.problem}</p>
-        )}
-        {!editing && firstVisibleKey === 'email' && visibleFields.email && (
-          <p className="font-semibold text-slate-800 text-sm">{ticket.email}</p>
+        {!editing && firstVisibleKey && (
+          <p className="font-semibold text-slate-800 text-sm break-words min-w-0">
+            {firstVisibleKey === 'name' && (ticket.name || 'Anonymous request')}
+            {firstVisibleKey === 'problem' && ticket.problem}
+            {firstVisibleKey === 'email' && ticket.email}
+          </p>
         )}
         {editing && <span />}
 
