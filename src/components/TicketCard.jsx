@@ -107,7 +107,7 @@ export default function TicketCard({
           <p className="font-semibold text-slate-800 text-sm">{ticket.name || 'Anonymous request'}</p>
         )}
         {!editing && firstVisibleKey === 'problem' && visibleFields.problem && (
-          <p className="font-semibold text-slate-800 text-sm line-clamp-2">{ticket.problem}</p>
+          <p className="font-semibold text-slate-800 text-sm break-words min-w-0">{ticket.problem}</p>
         )}
         {!editing && firstVisibleKey === 'email' && visibleFields.email && (
           <p className="font-semibold text-slate-800 text-sm">{ticket.email}</p>
