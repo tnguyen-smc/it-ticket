@@ -3,6 +3,42 @@ import emailjs from '@emailjs/browser'
 import { supabase } from '../supabaseClient'
 import PublicStatusSummary from './PublicStatusSummary'
 
+// IMPORTANT: these must live outside HelpForm, not be defined inside its
+// render body. Defining a component inline inside a parent means React sees
+// a brand-new component type every render, so it unmounts and remounts the
+// whole subtree (including the textarea) on every keystroke — which is what
+// was kicking focus out after a single letter.
+function PageShell({ children }) {
+  return (
+    <div
+      className="min-h-[100dvh] flex flex-col items-center justify-center gap-5 px-4 py-8"
+      style={{ backgroundColor: '#E8F0E9' }}
+    >
+      <img
+        src={`${import.meta.env.BASE_URL}Holy-Family.png`}
+        alt=""
+        className="h-20 sm:h-24 w-auto"
+        style={{
+          filter:
+            'drop-shadow(0 0 10px rgba(250,204,21,0.45)) drop-shadow(0 0 22px rgba(250,204,21,0.25))',
+        }}
+      />
+      <div className="flex items-center justify-center gap-6 flex-wrap w-full">{children}</div>
+    </div>
+  )
+}
+
+function Logo() {
+  return (
+    <img
+      src={`${import.meta.env.BASE_URL}School-logo.png`}
+      alt=""
+      className="h-14 w-auto mx-auto mb-3"
+      style={{ filter: 'brightness(0) saturate(100%)' }}
+    />
+  )
+}
+
 export default function HelpForm() {
   const [problem, setProblem] = useState('')
   const [status, setStatus] = useState('idle') // idle | sending | done | error
@@ -54,33 +90,6 @@ export default function HelpForm() {
     setStatus('done')
     setProblem('')
   }
-
-  const PageShell = ({ children }) => (
-    <div
-      className="min-h-[100dvh] flex flex-col items-center justify-center gap-5 px-4 py-8"
-      style={{ backgroundColor: '#E8F0E9' }}
-    >
-      <img
-        src={`${import.meta.env.BASE_URL}Holy-Family.png`}
-        alt=""
-        className="h-20 sm:h-24 w-auto"
-        style={{
-          filter:
-            'drop-shadow(0 0 10px rgba(250,204,21,0.45)) drop-shadow(0 0 22px rgba(250,204,21,0.25))',
-        }}
-      />
-      <div className="flex items-center justify-center gap-6 flex-wrap w-full">{children}</div>
-    </div>
-  )
-
-  const Logo = () => (
-    <img
-      src={`${import.meta.env.BASE_URL}School-logo.png`}
-      alt=""
-      className="h-14 w-auto mx-auto mb-3"
-      style={{ filter: 'brightness(0) saturate(100%)' }}
-    />
-  )
 
   if (status === 'done') {
     return (
